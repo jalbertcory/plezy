@@ -5,6 +5,8 @@
 
 A modern client for Plex, Jellyfin, and Emby on desktop, mobile, and TV. Built with Flutter for native performance and a clean interface.
 
+This fork develops updates for Android by default. Propagation to macOS, Windows, iOS, or other platforms requires an explicit decision. See [agent instructions](AGENTS.md) and the [fork change record](FORK_CHANGES.md).
+
 <p>
   <a href="https://plezy.app">Website</a> ·
   <a href="https://plezy.app/#screenshots">Screenshots</a> ·
