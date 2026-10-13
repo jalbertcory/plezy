@@ -15,7 +15,10 @@ version '1.0'
 android {
     namespace 'com.plezy.credentials'
     compileSdk 36
-    defaultConfig { minSdkVersion 23 }
+    defaultConfig {
+        minSdkVersion 23
+        consumerProguardFiles 'consumer-rules.pro'
+    }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17

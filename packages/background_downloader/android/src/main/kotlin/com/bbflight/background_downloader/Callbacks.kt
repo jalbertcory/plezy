@@ -8,6 +8,7 @@ import androidx.preference.PreferenceManager
 import io.flutter.FlutterInjector
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.dart.DartExecutor
+import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.view.FlutterCallbackInformation
 import kotlinx.coroutines.CompletableDeferred
@@ -20,6 +21,7 @@ import kotlinx.serialization.json.Json
 class Callbacks {
     companion object {
         const val TAG = "Callbacks"
+        private const val CREDENTIAL_PLUGIN = "com.plezy.credentials.AndroidCredentialStorePlugin"
         private var callbackMethodChannel: MethodChannel? = null
         private val methodChannelMutex = Mutex()
 
@@ -56,8 +58,10 @@ class Callbacks {
                                 methodChannelCompleter.complete(null)
                                 return@post
                             }
-                            // Credential resolution needs the app-owned native plugin in this headless engine.
-                            val flutterEngine = FlutterEngine(context)
+                            // Keep generated registration off so app plugins (media session,
+                            // this plugin's own background channel) are not re-attached here.
+                            val flutterEngine = FlutterEngine(context, null, false)
+                            registerCredentialPlugin(flutterEngine)
                             val callbackDispatcherCallback =
                                 FlutterCallbackInformation.lookupCallbackInformation(rawHandle)
                             if (callbackDispatcherCallback == null) {
@@ -91,6 +95,16 @@ class Callbacks {
                     return methodChannelCompleter.await() // Wait for the UI thread to finish
                 }
                 return callbackMethodChannel
+            }
+        }
+
+        /** Credential resolution needs only the app-owned Keystore plugin in this headless engine. */
+        private fun registerCredentialPlugin(engine: FlutterEngine) {
+            try {
+                val plugin = Class.forName(CREDENTIAL_PLUGIN).getDeclaredConstructor().newInstance()
+                engine.plugins.add(plugin as FlutterPlugin)
+            } catch (e: Exception) {
+                Log.w(TAG, "Credential plugin unavailable in callback engine")
             }
         }
 

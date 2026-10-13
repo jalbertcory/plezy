@@ -39,6 +39,15 @@ void main() {
     }
   });
 
+  test('only resettable sign-in failures take a running app to recovery', () {
+    const download = AndroidCredentialOwner('["download","task-1"]', 'Background download');
+    for (final problem in AndroidCredentialProblem.values) {
+      final failure = AndroidCredentialFailure(first, problem, 'rev');
+      expect(failure.requiresRecovery, failure.canReset);
+      expect(AndroidCredentialFailure(download, problem, 'rev').requiresRecovery, isFalse);
+    }
+  });
+
   test('transient lock can recover without a reset or data loss', () async {
     final reference = await AndroidCredentialStore.save(first, 'fake-a');
     backend.failures[first.id] = 'unavailable';

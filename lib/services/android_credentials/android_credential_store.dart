@@ -24,6 +24,11 @@ class AndroidCredentialFailure implements Exception {
   final String revision;
   bool get canReset =>
       problem == AndroidCredentialProblem.permanent || problem == AndroidCredentialProblem.resetPending;
+
+  /// Whether a running app must leave for the recovery screen. Transient
+  /// failures surface at their call site; a per-download item fails only that
+  /// download.
+  bool get requiresRecovery => canReset && !owner.scope.startsWith('["download"');
   @override
   String toString() => 'Android credential storage unavailable';
 }

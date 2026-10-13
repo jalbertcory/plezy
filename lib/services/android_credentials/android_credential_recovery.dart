@@ -13,7 +13,7 @@ import 'android_credential_store.dart';
 enum AndroidTransferOwnership { selected, unrelated, ambiguous }
 
 /// Public server identity alone cannot distinguish two accounts on one server.
-/// Missing or legacy provenance blocks reset instead of widening its scope.
+/// Missing provenance is reported as ambiguous; reset stops those transfers.
 AndroidTransferOwnership androidTransferOwnership(
   AndroidCredentialOwner owner, {
   required String taskId,
@@ -54,7 +54,9 @@ Future<void> stopAndroidCredentialTransfers(AndroidCredentialOwner owner) async 
       if (![TaskStatus.complete, TaskStatus.canceled, TaskStatus.notFound].contains(record.status))
         record.taskId: record.task,
     for (final task in await downloader.allTasks(group: 'video_downloads')) task.taskId: task,
-  };
+  }..removeWhere((_, task) => !isAndroidDownloadReference(task));
+  // Legacy requests never read this store and are retired when the
+  // downloader initializes, so they cannot block a confirmed reset.
   if (tasks.isEmpty) return;
   final database = (await AppDatabase.open(isTvos: false)).database;
   final affected = <Task>[];
@@ -62,7 +64,10 @@ Future<void> stopAndroidCredentialTransfers(AndroidCredentialOwner owner) async 
     final rows = {for (final row in await database.select(database.downloadedMedia).get()) row.globalKey: row};
     for (final task in tasks.values) {
       final key = parseGlobalKey(task.metaData);
-      if (key == null) throw StateError('Download ownership unavailable');
+      if (key == null) {
+        affected.add(task);
+        continue;
+      }
       final row = rows[task.metaData];
       final ownership = androidTransferOwnership(
         owner,
@@ -70,8 +75,9 @@ Future<void> stopAndroidCredentialTransfers(AndroidCredentialOwner owner) async 
         serverId: key.serverId,
         clientScopeId: row?.bgTaskId == task.taskId ? row?.clientScopeId : null,
       );
-      if (ownership == AndroidTransferOwnership.ambiguous) throw StateError('Download ownership unavailable');
-      if (ownership == AndroidTransferOwnership.selected) affected.add(task);
+      // Unknown provenance stops the download rather than blocking recovery;
+      // a stopped download can be queued again after sign-in.
+      if (ownership != AndroidTransferOwnership.unrelated) affected.add(task);
     }
   } finally {
     await database.close();

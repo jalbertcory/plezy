@@ -7,7 +7,7 @@ Exact revision: `ebdf69a7bdd03d410bfdfc700add08eed0de161d` (rebased from `09690d
 Local changes in this worktree:
 
 - Android `TaskRunner.kt`: retain an opaque persisted task and use the callback-resolved URL only for the live request. Reject legacy app video tasks pending migration. Sanitize credential-task errors, response bodies, and response headers.
-- Android `Callbacks.kt`: enable generated plugin registration in the headless callback engine so the app-owned Keystore channel is available. A disposable-emulator probe reproduced failure before this change and downloaded a local fake payload successfully afterward.
+- Android `Callbacks.kt`: keep generated plugin registration disabled in the headless callback engine and register only the app-owned Keystore plugin (`com.plezy.credentials.AndroidCredentialStorePlugin`, looked up by name and kept by that plugin's consumer R8 rules). Auto-registering every plugin there re-attached the app's media session and downloader channels to the headless engine.
 - Android `DownloadTaskRunner.kt`: avoid persisting resolved request information in failure responses.
 - `lib/src/base_downloader.dart`: guard legacy video-task resume/status/progress persistence on Android. Other platform paths keep source behavior.
 

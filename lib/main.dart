@@ -723,7 +723,9 @@ class _StartupBootstrapState<T> extends State<StartupBootstrap<T>> {
 
   void _onAndroidCredentialFailure() {
     final failure = AndroidCredentialStore.failureEvents.value;
-    if (!AndroidCredentialStore.enabled || failure == null || !_completed || !mounted) return;
+    if (!AndroidCredentialStore.enabled || failure == null || !failure.requiresRecovery || !_completed || !mounted) {
+      return;
+    }
     final previous = _value;
     // Remove the live app first. Its providers dispose network clients and
     // timers before reset actions become available in the bootstrap UI.

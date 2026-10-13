@@ -2626,10 +2626,23 @@ class DownloadManagerService {
 
   Future<void> _handleTaskStatusChanged(TaskStatusUpdate update) async {
     if (_disposed) return;
-    if (AndroidCredentialStore.enabled &&
-        [TaskStatus.complete, TaskStatus.canceled, TaskStatus.notFound].contains(update.status)) {
-      await removeAndroidDownloadCredential(update.task);
+    try {
+      await _handleTaskStatus(update);
+    } finally {
+      // Finished tasks never resolve their request again. Cleanup is
+      // best-effort so a store failure cannot block completion handling.
+      if (AndroidCredentialStore.enabled &&
+          [TaskStatus.complete, TaskStatus.canceled, TaskStatus.notFound].contains(update.status)) {
+        try {
+          await removeAndroidDownloadCredential(update.task);
+        } catch (_) {
+          appLogger.w('Could not remove a finished download credential');
+        }
+      }
     }
+  }
+
+  Future<void> _handleTaskStatus(TaskStatusUpdate update) async {
     final globalKey = update.task.metaData;
     if (globalKey.isEmpty) return;
 
