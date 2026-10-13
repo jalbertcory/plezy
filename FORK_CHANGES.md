@@ -5,7 +5,7 @@ This PR records Android player and language changes from [edde746/plezy](https:/
 ## Android mini player and episode track languages — 2026-10-13
 
 
-Intent: browse while a video keeps playing and make Japanese audio with English dialogue subtitles easier to select. Status: isolated PR draft on `codex/android-mini-player-languages`, based on the fork’s `main`. Release and merge remain unauthorized.
+Intent: browse while a video keeps playing and make Japanese audio with English dialogue subtitles easier to select. Status: committed for draft PR review on `codex/android-mini-player-languages`, based on the fork’s `main`. Implementation commit: `8729711dcfc69f599ca49356d1b1f1891939f1aa`. Release and merge remain unauthorized.
 
 Baseline: `edde746/plezy`, local `upstream/main`, at `96504b618d99113434029080e52d5e3413ec588d`. No upstream sync occurred for this change.
 
