@@ -4,14 +4,15 @@ This record tracks differences from [edde746/plezy](https://github.com/edde746/p
 
 ## Baseline and branch scope
 
-The verified local baseline is `96504b618d99113434029080e52d5e3413ec588d`. Local `origin/main` and `upstream/main` both resolve to that commit. Their default branch is `main`. This verification does not assert that the remote upstream has not advanced since the last fetch.
+The current upstream baseline is `8ef7c2cd9` from `edde746/plezy` `main`, synced into fork `main` on 2026-10-13 (previous baseline `96504b618d99113434029080e52d5e3413ec588d`). Fork `main` carries both Android PRs merged on top of it. This does not assert that the remote upstream has not advanced since the last fetch.
 
 | Branch | Purpose | Feature status |
 | --- | --- | --- |
+| `main` | Upstream baseline plus merged Android PRs #1 (mini player/track languages) and #2 (credential recovery) | Merged 2026-10-13; host tests and Android debug build pass; device validation pending |
 | `android-first` | Active Android-first work, created from the baseline | Local, uncommitted Android credential recovery implementation; host tests and Android debug build pass; device validation pending |
 | `secure-credential-storage` | Preserved earlier shared and native credential draft | Uncommitted, unreleased, unvalidated draft; broader platforms pending explicit opt-in |
 
-The original October 3 checkout layout used sibling directories: `plezy-android-first` and `plezy`. Those checkouts used the same Git repository and remotes. The original checkout retains all earlier feature edits. The original credential draft remains preserved without a feature commit on `android-first`. The separate review branch is recorded below. No merge or release has occurred.
+The original October 3 checkout layout used sibling directories: `plezy-android-first` and `plezy`. Those checkouts used the same Git repository and remotes. The original checkout retains all earlier feature edits. The original credential draft remains preserved without a feature commit on `android-first`. The separate review branches are recorded below. Both were merged into fork `main` on 2026-10-13 at Cory's request; no release has occurred.
 
 ## Android-first policy — local documentation change
 
@@ -162,7 +163,7 @@ The same Library report and patch identities are updated for these results. The 
 
 ## Upstream sync history
 
-No upstream sync has occurred after the baseline above. Future sync entries must record old and new commit IDs, affected fork entries, conflict resolutions, and tests actually run.
+2026-10-13: fork `main` fast-forwarded from `96504b618d99113434029080e52d5e3413ec588d` to upstream `8ef7c2cd9` (39 upstream commits). Fork `main` held no fork commits, so the sync had no conflicts. Both PR branches were then rebased onto it. The only overlap between them was this file, resolved by keeping both records. The rebased commits are `a3c9e1fed`/`25dd8d922` (credentials) and `59e6da1c6`/`dfbc8fbed` (mini player). The validation recorded in each PR's review-fix entry ran on the rebased code; the merged result was revalidated as recorded below. Future sync entries must record old and new commit IDs, affected fork entries, conflict resolutions, and tests actually run.
 
 ## Separate Android credential PR — 2026-10-13
 
@@ -190,3 +191,48 @@ Intent: address review findings on [PR #2](https://github.com/jalbertcory/plezy/
 - Not addressed (minor): delete journaling, credential cleanup for failed tasks, backup restore forcing a reset, and a Plex server without `clientIdentifier` keeping its `enc:v1` token.
 
 Validation in the session worktree: the CI quality steps passed (format, generated files, translations, icons, analyzer, unused code/files). The full `flutter test` run passed, **7,969 tests** with 6 skipped. The Android arm64 debug APK built. No emulator, device, or real credential store was used. Device validation remains pending.
+
+## Android mini player and episode track languages — 2026-10-13
+
+
+Intent: browse while a video keeps playing and make Japanese audio with English dialogue subtitles easier to select. Status: committed for draft PR review on `codex/android-mini-player-languages`, based on the fork’s `main`. Implementation commit: `59e6da1c6ec354cbd1f6c18d98a923346d332881` (originally `8729711dcfc69f599ca49356d1b1f1891939f1aa`, re-applied after the upstream sync); review fixes in `dfbc8fbedcd14b1284eb01f811e4d81ec13052d2`. Cory asked on October 13 for the PR to be reviewed, fixed and merged; release remains unauthorized.
+
+Baseline: originally `edde746/plezy` at `96504b618d99113434029080e52d5e3413ec588d`; rebased onto the synced fork `main` at `8ef7c2cd9` (see Upstream sync history).
+
+Approved scope: Android. Phone/tablet playback can minimize with a central downward swipe or the down-chevron button, then restore by tapping or swiping up on the mini player. The mini player has pause/play and close controls. This applies to the built-in VOD player inside the profile navigator. Live TV, external players, Automotive, and Watch Together do not minimize. Opening Live TV or another video while one is minimized stops the minimized one first. Android TV and Fire TV receive the language settings, track selection, and episode-card metadata; their remote-oriented playback does not gain swipe minimization. Other platforms retain their existing runtime behavior and await opt-in.
+
+Affected files:
+
+- `lib/navigation/android_video_session.dart`, `profile_session_screen.dart`, `lib/utils/video_player_navigation.dart`, `lib/screens/video_player_screen.dart`, its `parts/build.dart` and `parts/pip.dart`, and `lib/widgets/android_video_mini_player.dart` plus `video_controls/`: keep one keyed player screen across route moves, and place the existing native surface at the mini thumbnail rectangle (`setContainerRect` in the mpv and ExoPlayer Android plugins) while the browsing page clears that rectangle. Modal sheets hide the mini player without stopping playback. Closing or replacing playback uses the existing cleanup coordinator. System auto-PiP is disabled while minimized and restored with fullscreen playback. Playback prompts (play next, still watching) and playback failures restore fullscreen so they remain actionable. Replacing the episode from the mini player restores fullscreen first.
+- `lib/utils/android_track_metadata.dart`, `lib/services/android_track_preferences.dart`, `settings_service.dart`, `track_selection_service.dart`, `plex_client.dart`, `jellyfin_client.dart` and its `parts/playback.dart`, and `lib/screens/settings/playback_settings_screen.dart`: Android language defaults apply after explicit/carried choices and before server fallback, including transcode negotiation. An explicitly requested audio stream or a saved per-item Plex audio choice (selected but not the file default) outranks the Android audio default. The Android subtitle default waits for a late-loading dialogue sidecar before falling back. Full-dialogue preference rejects labelled signs-only/forced candidates. If the requested language has only those candidates, the automatic selection is off; manual selection remains available. Semantic episode carry separates labelled dialogue and signs tracks.
+- `lib/widgets/android_episode_tracks.dart`, `episode_card.dart`, and `lib/utils/track_label_builder.dart`: episode cards show audio and subtitle languages, subtitle role/title/codec/stream identity, and unknown metadata. Mounted online cards fetch missing item metadata without opening playback. Multiple versions are labelled as an aggregate. Offline cards use supplied metadata. TV horizontal rails retain their existing presentation. New UI text is English; translation remains pending.
+- Added Android preference/session/player-screen tests and updated affected settings, episode, gesture, Plex, and Jellyfin tests under `test/`.
+
+Compatibility: new nullable `android_audio_language` and `android_subtitle_language` preferences default to following server settings. `android_prefer_dialogue_subtitles` defaults to true and applies when a subtitle language is configured. These keys participate in the existing settings import/reset registry but are ignored outside Android. No data migration, schema change, new dependency, or credential change was introduced. The native change is limited to the Android player plugins' `setContainerRect` call. Rollback removes this implementation; older builds ignore the new keys. A title can identify a language only when it provides unambiguous evidence. Untagged tracks remain unknown, and titles cannot prove subtitle content completeness.
+
+Validation in the original checkout: **1,026 affected host tests passed**, covering Android track defaults and source negotiation, metadata/settings widgets, gesture conflicts, session persistence and close, native-surface transparency, real player-screen reparenting/retirement, existing video controls, navigation, track selection, and playback failures. After the modal-sheet visibility fix, all seven session/profile/player-screen tests passed again, including sheet dismissal without player recreation. Tests use fabricated fixtures and mocked stores. Whole-project `flutter analyze --no-pub` reports **No issues found**; `git diff --check` passes. The Android arm64 debug APK rebuilt successfully using Flutter 3.47.1 and the approved SDK/JDK/cache paths. Existing KGP migration warnings remain.
+
+Prior work preservation: compared the saved pre-feature patch/archive with the final worktree. All 20 previously modified tracked files other than this change record and all 169 archived untracked files are unchanged. Plezy and dependency attribution remain intact.
+
+Pending: interactive swipe/orientation/background/subtitle rendering checks on a disposable Android target, Android TV/Fire TV remote focus, and real-server metadata variation. No emulator or personal device was launched or modified for this feature, and no real credential values or stores were accessed. Validation logs and the pre-feature backup are local under `/private/tmp/plezy-before-player-20261013/`.
+
+PR validation: feature files were extracted from the Android draft into this clean checkout. Credential code, dependency changes, and unrelated policy/documentation edits are excluded. In this isolated checkout, all 1,026 affected host tests passed. After the icon correction, all 22 mini-player/header/gesture tests passed again. The exact CI analyzer guard, changed-file formatting, icon consistency, generated-file verification, strict translation hygiene, CI script guards, and unused-code/file checks passed. The final Android arm64 debug APK built successfully with the original pinned dependencies. Remote CI and hands-on device/TV checks remain pending.
+
+## Mini player PR review fixes — 2026-10-13
+
+Intent: address review findings on [PR #1](https://github.com/jalbertcory/plezy/pull/1) before merge. Commit: `dfbc8fbedcd14b1284eb01f811e4d81ec13052d2` on `review/pr1`, rebased onto fork `main` after the upstream sync.
+
+- Native mini placement: `SurfacePlayerCore`, `PlayerSurfaceHost`, `MpvPlayerCore`/`ExoPlayerCore` and both Android player plugins gain `setContainerRect`, so the existing SurfaceView moves to the mini thumbnail instead of staying fullscreen behind the Flutter window. `player_base.dart` exposes Android-only `setAndroidContainerRect`/`clearAndroidContainerRect`; restoring fullscreen clears the rectangle.
+- `video_player_screen.dart`: play-next, still-watching and playback-failure states restore fullscreen and block minimizing. `episode_navigation.dart` restores fullscreen before replacing the episode from the mini player.
+- `video_player_navigation.dart` and `live_tv_player_navigation.dart`: opening a video or Live TV while one is minimized stops the minimized player first. The duplicate-launch guard no longer swallows a relaunch of the minimized item.
+- `track_selection_service.dart`, `track_manager.dart`, `playback_open.dart`, `android_track_preferences.dart`: an explicitly requested audio stream or a saved per-item Plex audio choice outranks the Android audio default. The Android subtitle default resolves against the source catalog and waits for a late-loading dialogue sidecar.
+- Tests: `android_track_preferences_test.dart` and `android_video_session_test.dart` add saved/requested audio precedence, late sidecar, minimized-host and non-Android (iOS) checks.
+- Known limits: subtitle rows carry no default flag, so a Plex per-episode saved subtitle can still be overridden by the Android subtitle default. The Watch Together confirm dialog while minimized uses the root navigator. ExoPlayer subtitle sizing in the mini rectangle is unverified.
+
+Validation in the isolated PR worktree: the CI quality steps passed (format, generated files, translations, icons, analyzer, unused code/files). The full `flutter test` run passed, **7,967 tests** with 6 skipped. The Android arm64 debug APK built, compiling the new Kotlin. No emulator or device was used; interactive mini-player, orientation and TV checks remain pending.
+
+## Merge of PRs #1 and #2 into fork `main` — 2026-10-13
+
+Cory asked for both PRs to be reviewed, fixed and merged. PR #2 (credentials) was merged first, then PR #1 (mini player). The only conflict was this file: both records were kept, and the baseline and sync-history sections were updated. No code conflicts.
+
+Validation of the merged tree: `flutter pub get`, then the CI quality steps (format, generated files, translations, icons, analyzer, unused code/files) passed. The full `flutter test` run passed, **7,993 tests** with 6 skipped. The Android arm64 debug APK built. Remote CI, device, emulator, Android TV and Fire TV checks remain pending; Cory will test on a device.

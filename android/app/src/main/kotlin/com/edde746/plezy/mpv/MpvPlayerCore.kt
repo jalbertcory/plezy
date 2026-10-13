@@ -3031,6 +3031,14 @@ class MpvPlayerCore private constructor(
     // MPV handles aspect ratio internally via its own surface management
   }
 
+  override fun setContainerRect(rect: android.graphics.Rect?) {
+    if (audioOnly || disposing) return
+    runOnMain {
+      if (disposing) return@runOnMain
+      surfaceContainer?.let { PlayerSurfaceHost.setContainerRect(it, rect) }
+    }
+  }
+
   override fun updateFrame() {
     // Audio-only: no surface to refresh — tolerated no-op.
     if (audioOnly || disposing) return

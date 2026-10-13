@@ -3,6 +3,7 @@ package com.edde746.plezy.shared
 import android.app.Activity
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.view.Gravity
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.ViewGroup
@@ -75,6 +76,31 @@ internal object PlayerSurfaceHost {
         (view as SurfaceView).holder.setFixedSize(size.width, size.height)
       }
     }
+  }
+
+  /**
+   * Moves the whole player container (video, OSD and subtitle planes) to a
+   * physical-pixel rectangle of the content view, or back to full size for a
+   * null [rect]. The cores re-derive their video geometry from the container
+   * on the next layout, the same way a PiP window resize does.
+   */
+  fun setContainerRect(container: FrameLayout, rect: android.graphics.Rect?) {
+    val lp = container.layoutParams as? FrameLayout.LayoutParams ?: FrameLayout.LayoutParams(
+      FrameLayout.LayoutParams.MATCH_PARENT,
+      FrameLayout.LayoutParams.MATCH_PARENT
+    )
+    val width = rect?.width() ?: FrameLayout.LayoutParams.MATCH_PARENT
+    val height = rect?.height() ?: FrameLayout.LayoutParams.MATCH_PARENT
+    val left = rect?.left ?: 0
+    val top = rect?.top ?: 0
+    val gravity = Gravity.TOP or Gravity.START
+    if (lp.width == width && lp.height == height && lp.leftMargin == left && lp.topMargin == top && lp.gravity == gravity) return
+    lp.width = width
+    lp.height = height
+    lp.leftMargin = left
+    lp.topMargin = top
+    lp.gravity = gravity
+    container.layoutParams = lp
   }
 
   fun attachToContent(activity: Activity, container: FrameLayout): ViewGroup {

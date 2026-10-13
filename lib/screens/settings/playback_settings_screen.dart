@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../i18n/strings.g.dart';
@@ -13,6 +14,7 @@ import '../../utils/quality_preset_labels.dart';
 import '../../services/settings_service.dart';
 import '../../services/video_decode_capabilities.dart';
 import '../../utils/codec_utils.dart';
+import '../../utils/language_codes.dart';
 import '../../utils/platform_detector.dart';
 import '../../widgets/setting_tile.dart';
 import '../../widgets/settings_builder.dart';
@@ -142,6 +144,7 @@ class PlaybackSettingsScreen extends StatelessWidget {
               ],
             ),
 
+            if (defaultTargetPlatform == TargetPlatform.android) _trackLanguagesGroup(),
             _seekAndTimingGroup(),
             _autoPlayAndSkipGroup(),
             _behaviorGroup(context, isMobile),
@@ -153,6 +156,35 @@ class PlaybackSettingsScreen extends StatelessWidget {
       },
     );
   }
+
+  Widget _trackLanguagesGroup() => SettingsGroup(
+    title: 'Audio and subtitle languages',
+    children: [
+      _languageTile(SettingsService.androidAudioLanguage, 'Default audio language', Symbols.language_rounded),
+      _languageTile(SettingsService.androidSubtitleLanguage, 'Default subtitle language', Symbols.subtitles_rounded),
+      SettingSwitchTile(
+        pref: SettingsService.androidPreferDialogueSubtitles,
+        icon: Symbols.closed_caption_rounded,
+        title: 'Prefer full dialogue subtitles',
+        subtitle:
+            'Avoid signs-only and forced tracks when choosing your default subtitle language. Manual choices still win.',
+      ),
+    ],
+  );
+
+  Widget _languageTile(NullableStringPref pref, String title, IconData icon) => SettingSelectionTile<String?>(
+    pref: pref,
+    icon: icon,
+    title: title,
+    subtitleBuilder: (value) => value == null ? 'Follow server settings' : LanguageCodes.getDisplayName(value),
+    options: [
+      const DialogOption(value: null, title: 'Follow server settings'),
+      const DialogOption(value: 'ja', title: 'Japanese'),
+      const DialogOption(value: 'en', title: 'English'),
+      for (final language in LanguageCodes.getAllLanguages())
+        if (language.code != 'ja' && language.code != 'en') DialogOption(value: language.code, title: language.name),
+    ],
+  );
 
   Widget _seekAndTimingGroup() => SettingsGroup(
     title: t.settings.seekAndTiming,

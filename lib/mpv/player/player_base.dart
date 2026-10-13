@@ -1286,6 +1286,22 @@ abstract class PlayerBase with PlayerStreamControllersMixin implements Player {
   // ignore: no-empty-block - base no-op, overridden by platform subclasses
   Future<void> updateFrame() async {}
 
+  /// Android mini player only: moves the native player container to a
+  /// physical-pixel rectangle of the Flutter view; null restores full size.
+  Future<void> setAndroidContainerRect({
+    required int left,
+    required int top,
+    required int right,
+    required int bottom,
+  }) => _invokeAndroidContainerRect({'left': left, 'top': top, 'right': right, 'bottom': bottom});
+
+  Future<void> clearAndroidContainerRect() => _invokeAndroidContainerRect(null);
+
+  Future<void> _invokeAndroidContainerRect(Map<String, int>? rect) async {
+    if (!Platform.isAndroid || _disposed) return;
+    await invoke<void>('setContainerRect', rect);
+  }
+
   @override
   Future<bool> isHdrOutputSupported() async => false;
 

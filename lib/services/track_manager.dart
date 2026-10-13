@@ -91,6 +91,10 @@ class TrackManager {
   /// gated.
   bool persistAutomaticSubtitleSelection = true;
 
+  /// The open requested a specific audio stream; see
+  /// [TrackSelectionService.audioStreamRequested].
+  final bool audioStreamRequested;
+
   // ── Internal state ─────────────────────────────────────────────────
 
   bool _isApplyingTrackSelection = false;
@@ -136,6 +140,7 @@ class TrackManager {
     this.preferredSecondarySubtitleTrack,
     this.primarySubtitleIsServerRendered = false,
     this.persistAutomaticSubtitleSelection = true,
+    this.audioStreamRequested = false,
     this.showMessage,
     this.playbackRateOwnedExternally,
   });
@@ -233,7 +238,11 @@ class TrackManager {
     final realSubtitleTracks = tracks.subtitle
         .where((track) => track.id != SubtitleTrack.auto.id && track.id != SubtitleTrack.off.id)
         .toList(growable: false);
-    final service = TrackSelectionService(metadata: metadata, plexMediaInfo: mediaInfo);
+    final service = TrackSelectionService(
+      metadata: metadata,
+      plexMediaInfo: mediaInfo,
+      audioStreamRequested: audioStreamRequested,
+    );
 
     // A burned-in primary is already in the picture, so no native track is ever coming for it.
     // Waiting for one holds up audio and rate setup for the five-second fallback and then logs a
@@ -333,6 +342,7 @@ class TrackManager {
         profileSettings: profileSettings,
         metadata: metadata,
         plexMediaInfo: mediaInfo,
+        audioStreamRequested: audioStreamRequested,
       );
 
       return await trackService.selectAndApplyTracks(

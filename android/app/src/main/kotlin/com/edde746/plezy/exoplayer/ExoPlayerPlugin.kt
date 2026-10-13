@@ -250,6 +250,7 @@ class ExoPlayerPlugin :
       "addSubtitleTrack" -> handleAddSubtitleTrack(call, result)
       "setVisible" -> handleSetVisible(call, result)
       "updateFrame" -> handleUpdateFrame(result)
+      "setContainerRect" -> handleSetContainerRect(call, result)
       "setVideoFrameRate" -> handleSetVideoFrameRate(call, result)
       "clearVideoFrameRate" -> handleClearVideoFrameRate(result)
       "requestAudioFocus" -> handleRequestAudioFocus(result)
@@ -1012,6 +1013,20 @@ class ExoPlayerPlugin :
     }
 
     activeSurfaceCore?.setVisible(visible)
+    result.success(null)
+  }
+
+  private fun handleSetContainerRect(call: MethodCall, result: MethodChannel.Result) {
+    val left = call.argument<Number>("left")?.toInt()
+    val top = call.argument<Number>("top")?.toInt()
+    val right = call.argument<Number>("right")?.toInt()
+    val bottom = call.argument<Number>("bottom")?.toInt()
+    val rect = if (left != null && top != null && right != null && bottom != null && right > left && bottom > top) {
+      android.graphics.Rect(left, top, right, bottom)
+    } else {
+      null
+    }
+    activeSurfaceCore?.setContainerRect(rect)
     result.success(null)
   }
 

@@ -598,6 +598,7 @@ class PlexVideoControls extends StatefulWidget {
 
   /// Called when back button is pressed (for Watch Together session leave confirmation)
   final VoidCallback? onBack;
+  final VoidCallback? onMinimize;
 
   /// Called when the video has effectively reached the end (e.g. credits extend
   /// to EOF and can't be seeked past). Parent should route this into its normal
@@ -725,6 +726,7 @@ class PlexVideoControls extends StatefulWidget {
     this.onPlayPauseRequested,
     this.onSeekCompleted,
     this.onBack,
+    this.onMinimize,
     this.onReachedEnd,
     this.canControl = true,
     required this.canNavigateMediaItems,
@@ -811,6 +813,9 @@ class _PlexVideoControlsState extends State<PlexVideoControls>
   // Deferred lone-tap action for the skip zones, and the pairing window itself:
   // while it is active the tap that started it can still become a double tap.
   Timer? _singleTapTimer;
+  int? _minimizeSwipePointer;
+  Offset? _minimizeSwipeStart;
+  bool _minimizeSwipeBlocked = false;
   final TwoFingerTapTracker _twoFingerTapTracker = TwoFingerTapTracker();
   final MobileEdgeAdjustmentTracker _edgeAdjustmentTracker = MobileEdgeAdjustmentTracker();
   final DeviceAdjustmentService _deviceAdjustmentService = DeviceAdjustmentService.instance;
@@ -1336,6 +1341,7 @@ class _PlexVideoControlsState extends State<PlexVideoControls>
                                                       onCancelAutoHide: widget.chromeController.cancelAutoHide,
                                                       onStartAutoHide: _startHideTimer,
                                                       onBack: widget.onBack,
+                                                      onMinimize: widget.onMinimize,
                                                       onNext: _abandoningBurst(widget.onNext),
                                                       onPrevious: _abandoningBurst(widget.onPrevious),
                                                       canControl: widget.canControl,

@@ -40,6 +40,7 @@ import '../watch_together/providers/watch_together_provider.dart';
 import '../widgets/music/mini_player.dart';
 import '../widgets/agent_control_scope.dart';
 import 'profile_navigation_scope.dart';
+import 'android_video_session.dart';
 import 'settings_shortcut.dart';
 
 CatalogSourcesProvider _createCatalogSourcesProvider(BuildContext context) {
@@ -374,20 +375,22 @@ class _ProfileSessionNavigatorState extends State<_ProfileSessionNavigator> {
             child: SettingsShortcut(
               navigatorKey: _navigatorKey,
               settingsRoutes: _settingsRouteTracker,
-              child: Stack(
-                children: [
-                  Navigator(
-                    key: _navigatorKey,
-                    observers: [
-                      _routeObserver,
-                      _musicRouteObserver,
-                      _settingsRouteTracker,
-                      BackKeySuppressorObserver(),
-                    ],
-                    onGenerateRoute: _onGenerateRoute,
-                  ),
-                  const Positioned.fill(child: MusicMiniPlayerOverlay()),
-                ],
+              child: AndroidVideoPlayerHost(
+                child: Stack(
+                  children: [
+                    Navigator(
+                      key: _navigatorKey,
+                      observers: [
+                        _routeObserver,
+                        _musicRouteObserver,
+                        _settingsRouteTracker,
+                        BackKeySuppressorObserver(),
+                      ],
+                      onGenerateRoute: _onGenerateRoute,
+                    ),
+                    const Positioned.fill(child: MusicMiniPlayerOverlay()),
+                  ],
+                ),
               ),
             ),
           ),

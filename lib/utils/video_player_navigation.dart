@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../media/ids.dart';
+import '../navigation/android_video_session.dart';
 
 import 'package:flutter/material.dart';
 
@@ -41,7 +42,7 @@ const String kVideoPlayerRouteName = '/video_player';
 /// Commit through [push], not Navigator.push: a covered player still owns the
 /// native channel and must leave before another playback can take ownership.
 class VideoPlayerRoute extends PageRouteBuilder<bool> {
-  VideoPlayerRoute({required WidgetBuilder builder, this.watchTogetherLease})
+  VideoPlayerRoute({required WidgetBuilder builder, this.watchTogetherLease, this.androidSession})
     : super(
         settings: const RouteSettings(name: kVideoPlayerRouteName),
         pageBuilder: (context, _, _) => builder(context),
@@ -55,6 +56,7 @@ class VideoPlayerRoute extends PageRouteBuilder<bool> {
   bool get isReplacingWithVideo => _isReplacingWithVideo;
   bool _isReplacingWithVideo = false;
   final WatchPlaybackLease? watchTogetherLease;
+  final AndroidVideoSession? androidSession;
 
   /// Consult the committed successor, not just the first replacement: several
   /// launches can commit before the outgoing screen is disposed.
@@ -85,7 +87,7 @@ class VideoPlayerRoute extends PageRouteBuilder<bool> {
       result = navigator.push<bool>(this);
     }
     _activeRoutes[navigator] = this;
-    return result;
+    return androidSession?.observeRoute(this, result) ?? result;
   }
 
   @override
@@ -311,6 +313,26 @@ Future<bool?> navigateToVideoPlayer(
   bool launchCurrent() =>
       (isLaunchCurrent?.call() ?? true) && (launchObserver?.isCurrent ?? true) && (playbackLease?.isCurrent ?? true);
   if (!launchCurrent()) return null;
+  final androidHost = androidVideoHostOf(context);
+  final miniHost = playbackLease == null && AndroidVideoPlayerHost.enabled(context)
+      ? AndroidVideoPlayerHost.maybeOf(context)
+      : null;
+  final miniSession = miniHost?.session;
+  if (miniSession?.isMini == true &&
+      VideoPlayerScreenState.activeGlobalKey == metadata.globalKey &&
+      selectedMediaIndex == null &&
+      selectedMediaSourceId == null &&
+      preferredAudioTrack == null &&
+      preferredSubtitleTrack == null &&
+      preferredSecondarySubtitleTrack == null &&
+      selectedQualityPreset == null &&
+      initialPosition == null &&
+      !explicitStartPolicy &&
+      !strictMediaSelection &&
+      playbackLease == null) {
+    miniSession!.restore();
+    return null;
+  }
   if (resolveWatchState) {
     metadata = context.readFreshWatchState(metadata);
   }
@@ -440,8 +462,11 @@ Future<bool?> navigateToVideoPlayer(
       appLogger.w('External player launch failed, falling back to built-in player', error: e);
     }
 
-    // Prevent stacking an identical video player when already active.
-    if (!usePushReplacement && VideoPlayerScreenState.isNavigationActive(launchIdentity)) {
+    // Prevent stacking an identical video player when already active. A
+    // minimized copy is replaced instead: these options skipped its restore.
+    if (!usePushReplacement &&
+        androidHost?.hasMinimizedVideo != true &&
+        VideoPlayerScreenState.isNavigationActive(launchIdentity)) {
       appLogger.d(
         'Video player already active for ${metadata.globalKey} (mediaIndex=$mediaIndex), skipping duplicate navigation',
       );
@@ -463,25 +488,31 @@ Future<bool?> navigateToVideoPlayer(
       return null;
     }
 
-    final route = VideoPlayerRoute(
+    Widget playerBuilder(BuildContext _) => VideoPlayerScreen(
+      metadata: metadata,
+      preferredAudioTrack: preferredAudioTrack,
+      preferredSubtitleTrack: preferredSubtitleTrack,
+      preferredSecondarySubtitleTrack: preferredSecondarySubtitleTrack,
+      selectedMediaIndex: mediaIndex,
+      selectedMediaSourceId: mediaSourceId,
+      preferredVersionSignature: savedVersion?.signature,
+      selectedQualityPreset: selectedQualityPreset,
+      isOffline: isOffline,
       watchTogetherLease: playbackLease,
-      builder: (_) => VideoPlayerScreen(
-        metadata: metadata,
-        preferredAudioTrack: preferredAudioTrack,
-        preferredSubtitleTrack: preferredSubtitleTrack,
-        preferredSecondarySubtitleTrack: preferredSecondarySubtitleTrack,
-        selectedMediaIndex: mediaIndex,
-        selectedMediaSourceId: mediaSourceId,
-        preferredVersionSignature: savedVersion?.signature,
-        selectedQualityPreset: selectedQualityPreset,
-        isOffline: isOffline,
-        watchTogetherLease: playbackLease,
-        initialPosition: initialPosition,
-        strictMediaSelection: strictMediaSelection,
-        isLaunchCurrent: isLaunchCurrent,
-        launchObserver: launchObserver,
-      ),
+      initialPosition: initialPosition,
+      strictMediaSelection: strictMediaSelection,
+      isLaunchCurrent: isLaunchCurrent,
+      launchObserver: launchObserver,
     );
+    // Stop a previous minimized session before publishing a new keyed screen,
+    // including Watch Together launches, which never minimize themselves.
+    // The coordinator waits for its native disposal before another open.
+    if (androidHost?.hasMinimizedVideo == true) {
+      if (!await stopMinimizedAndroidVideo()) return null;
+      if (!context.mounted || !launchCurrent()) return null;
+    }
+    final session = miniHost?.createSession(navigator, playerBuilder, playbackLease);
+    final route = session?.createRoute() ?? VideoPlayerRoute(watchTogetherLease: playbackLease, builder: playerBuilder);
 
     pushFuture = route.push(navigator, replaceCurrent: usePushReplacement);
     launchObserver?.mark('opening');
