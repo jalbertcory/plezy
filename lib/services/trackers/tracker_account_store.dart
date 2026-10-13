@@ -1,3 +1,5 @@
+import '../android_credentials/android_credential_store.dart';
+import '../android_credentials/android_credential_bindings.dart';
 import '../../profiles/profile.dart';
 import '../base_shared_preferences_service.dart';
 import 'tracker_constants.dart';
@@ -31,7 +33,9 @@ class TrackerAccountStore {
 
   Future<TrackerSession?> load(String userUuid) async {
     final prefs = await BaseSharedPreferencesService.sharedCache();
-    final raw = readTolerantString(prefs, _scopedKey(userUuid));
+    final raw = AndroidCredentialStore.enabled
+        ? await AndroidCredentialPreferences.load(_scopedKey(userUuid))
+        : readTolerantString(prefs, _scopedKey(userUuid));
     if (raw == null) return null;
     try {
       return TrackerSession.decode(raw, service: service);
@@ -41,11 +45,15 @@ class TrackerAccountStore {
   }
 
   Future<void> save(String userUuid, TrackerSession session) async {
+    if (AndroidCredentialStore.enabled) {
+      return AndroidCredentialPreferences.save(_scopedKey(userUuid), session.encode());
+    }
     final prefs = await BaseSharedPreferencesService.sharedCache();
     await prefs.setString(_scopedKey(userUuid), session.encode());
   }
 
   Future<void> clear(String userUuid) async {
+    if (AndroidCredentialStore.enabled) return AndroidCredentialPreferences.clear(_scopedKey(userUuid));
     final prefs = await BaseSharedPreferencesService.sharedCache();
     await prefs.remove(_scopedKey(userUuid));
   }

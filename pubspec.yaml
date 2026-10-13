@@ -12,6 +12,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  android_credential_store:
+    path: packages/android_credential_store
   clock: ^1.1.2
   intl: ^0.20.2
   json_annotation: ^4.12.0
@@ -66,9 +68,7 @@ dependencies:
   # Ethernet (upstream 9.6.1's Wi-Fi NetworkRequest kept NOT_VPN). Keep the
   # same-filesystem move/resume cleanup; no per-host TLS bypass.
   background_downloader:
-    git:
-      url: https://github.com/edde746/background_downloader
-      ref: 09690d61b29fe81feb5495cc9a5dc4349c0caef3
+    path: packages/background_downloader
   sentry_flutter: ^9.30.0
   auto_updater:
     git:

@@ -1,3 +1,7 @@
+import 'services/android_credentials/android_credential_store.dart';
+import 'services/android_credentials/android_credential_bindings.dart';
+import 'services/android_credentials/android_credential_recovery.dart';
+import 'widgets/android_credential_recovery_view.dart';
 import 'dart:async';
 import 'dart:io' show Directory, Platform, ProcessInfo;
 import 'dart:ui' show AppExitResponse;
@@ -689,6 +693,7 @@ class _StartupBootstrapState<T> extends State<StartupBootstrap<T>> {
   bool _completed = false;
   bool _initializing = false;
   bool _repairing = false;
+  final _androidCredentialRetries = AndroidCredentialRetryBudget();
 
   /// Terminal: the store was repaired but the plugin still holds the bad
   /// document, so this process can never open it. Latched, never cleared —
@@ -703,10 +708,35 @@ class _StartupBootstrapState<T> extends State<StartupBootstrap<T>> {
   void initState() {
     super.initState();
     unawaited(_resolveTheme());
+    AndroidCredentialStore.failureEvents.addListener(_onAndroidCredentialFailure);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AndroidExitDiagnostics.markStartupPhase(AndroidStartupPhase.firstFrame);
       if (mounted) unawaited(_initialize());
     });
+  }
+
+  void _onAndroidCredentialFailure() {
+    final failure = AndroidCredentialStore.failureEvents.value;
+    if (!AndroidCredentialStore.enabled || failure == null || !_completed || !mounted) return;
+    final previous = _value;
+    // Remove the live app first. Its providers dispose network clients and
+    // timers before reset actions become available in the bootstrap UI.
+    setState(() {
+      _completed = false;
+      _value = null;
+      _initializing = true;
+    });
+    unawaited(() async {
+      await WidgetsBinding.instance.endOfFrame;
+      TrackerCoordinator.instance.cancelInFlight();
+      if (previous != null) await _discard(previous);
+      if (!mounted) return;
+      setState(() {
+        _initializing = false;
+        _failureError = failure;
+        _failure = widget.describeFailure(failure, StackTrace.current);
+      });
+    }());
   }
 
   /// Adopts the persisted theme for the startup frames.
@@ -733,6 +763,7 @@ class _StartupBootstrapState<T> extends State<StartupBootstrap<T>> {
     final generation = ++_generation;
     setState(() {
       _failure = null;
+      _failureError = null;
       _initializing = true;
     });
 
@@ -812,6 +843,7 @@ class _StartupBootstrapState<T> extends State<StartupBootstrap<T>> {
 
   @override
   void dispose() {
+    AndroidCredentialStore.failureEvents.removeListener(_onAndroidCredentialFailure);
     _generation++;
     super.dispose();
   }
@@ -838,6 +870,20 @@ class _StartupBootstrapState<T> extends State<StartupBootstrap<T>> {
 
   Widget _buildBootstrapHome(BuildContext context) {
     final failure = _failure;
+    final cause = _failureError == null ? null : StartupPhaseException.unwrap(_failureError!);
+    if (AndroidCredentialStore.enabled && cause is AndroidCredentialFailure) {
+      return Scaffold(
+        body: AndroidCredentialRecoveryView(
+          key: ValueKey('${cause.owner.id}/${cause.revision}'),
+          failure: cause,
+          retriesRemaining: _androidCredentialRetries.remaining(cause),
+          onRetry: () {
+            if (_androidCredentialRetries.take(cause)) unawaited(_initialize());
+          },
+          onContinue: () => unawaited(_initialize()),
+        ),
+      );
+    }
     if (failure != null) {
       return Scaffold(
         body: StartupFailureView(
@@ -969,6 +1015,12 @@ Future<_StartupDependencies> _initializeStartup(SettingsService settings) async 
       ),
     );
     openedDatabase = databaseBootstrap.database;
+    if (AndroidCredentialStore.enabled) {
+      await _gatePhase(
+        StartupPhase.storage,
+        () => AndroidCredentialBindings.checkAndMigrate(databaseBootstrap.database),
+      );
+    }
     AndroidExitDiagnostics.markStartupPhase(AndroidStartupPhase.databaseReady);
     markStartupPhase('database-recovery');
 
@@ -2039,6 +2091,25 @@ class _SetupScreenState extends State<SetupScreen> with MountedSetStateMixin {
   }
 
   Future<void> _loadSavedCredentials() async {
+    if (AndroidCredentialStore.enabled && AndroidCredentialStore.requiresAccountSignIn) {
+      await Future<void>.delayed(Duration.zero);
+      if (mounted) {
+        unawaited(
+          Navigator.pushReplacement(
+            context,
+            fadeRoute(
+              AuthScreen(
+                initialErrorMessage:
+                    'Sign in again to replace the saved credential you reset. Other accounts and local data are preserved.',
+                initializeServices: widget.initializeAuthServices,
+              ),
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
     if (shouldBypassSetupForDatabaseRecovery(widget.databaseRecoveryOutcome)) {
       final message = t.auth.localDataRecoveryRequired;
       final debugRouter = widget.debugRecoveryRequiredRouter;

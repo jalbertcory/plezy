@@ -1,3 +1,5 @@
+import '../android_credentials/android_credential_store.dart';
+import '../android_credentials/android_credential_bindings.dart';
 import '../../models/seerr/seerr_session.dart';
 import '../../profiles/profile.dart';
 import '../../utils/serial_future_queue.dart';
@@ -23,6 +25,10 @@ class SeerrSessionStore {
   String _scopedKey(String userUuid) => profileScopedPrefsKey(userUuid, _baseKey);
 
   Future<SeerrSession?> load(String userUuid) => _persistence.run(() async {
+    if (AndroidCredentialStore.enabled) {
+      final value = await AndroidCredentialPreferences.load(_scopedKey(userUuid));
+      return value == null ? null : SeerrSession.decode(value);
+    }
     final prefs = await BaseSharedPreferencesService.sharedCache();
     // Outside the try below on purpose: an unreadable credential must
     // reach the repair prompt, not be swallowed as 'no session'.
@@ -38,6 +44,9 @@ class SeerrSessionStore {
   });
 
   Future<void> save(String userUuid, SeerrSession session) => _persistence.run(() async {
+    if (AndroidCredentialStore.enabled) {
+      return AndroidCredentialPreferences.save(_scopedKey(userUuid), session.encode());
+    }
     final prefs = await BaseSharedPreferencesService.sharedCache();
     final protected = session.secret.isEmpty
         ? session
@@ -46,6 +55,7 @@ class SeerrSessionStore {
   });
 
   Future<void> clear(String userUuid) => _persistence.run(() async {
+    if (AndroidCredentialStore.enabled) return AndroidCredentialPreferences.clear(_scopedKey(userUuid));
     final prefs = await BaseSharedPreferencesService.sharedCache();
     await prefs.remove(_scopedKey(userUuid));
   });

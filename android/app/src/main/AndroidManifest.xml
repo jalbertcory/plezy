@@ -32,6 +32,8 @@
     <uses-feature android:name="android.hardware.type.automotive" android:required="false" />
 
     <application
+        android:fullBackupContent="@xml/credential_backup_rules"
+        android:dataExtractionRules="@xml/credential_data_extraction_rules"
         android:label="Plezy"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"

@@ -182,6 +182,7 @@ class DownloadProvider extends ChangeNotifier with DisposableChangeNotifierMixin
     _syncRules.clear();
     _metadata.clear();
     _activeProfileId = profileId;
+    if (profileId != null) _downloadManager.enableAndroidDownloadsForProfile();
     _metadataStore.setActiveProfileId(profileId);
     safeNotifyListeners();
     final reload = _reloadProfileScopedStateForActiveProfile();
@@ -278,6 +279,8 @@ class DownloadProvider extends ChangeNotifier with DisposableChangeNotifierMixin
   /// Preserve physical downloads across a full logout while detaching them
   /// from profiles that are about to be deleted. The next selected profile
   /// adopts the ownerless rows through [_loadDownloadOwners].
+  Future<void> stopAndroidDownloadsForLogout() => _downloadManager.stopAndroidDownloadsForLogout();
+
   Future<void> detachDownloadsForLogout() async {
     // Invalidate any in-flight profile reload before waiting for it: an old
     // reload may still finish its DB adoption, but cannot repopulate the

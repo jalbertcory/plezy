@@ -1,3 +1,4 @@
+import '../services/android_credentials/android_credential_store.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -135,7 +136,14 @@ class AppDatabase extends _$AppDatabase {
 
   /// Wraps one complete registry identity mutation. Nested registry helpers
   /// share the outer commit and all identity/pending commits are serialized.
+  final _androidIdentityQueue = SerialFutureQueue();
+  final _androidIdentityZone = Object();
+
   Future<T> runIdentityMutation<T>(Future<T> Function() mutation) {
+    if (AndroidCredentialStore.enabled) {
+      if (Zone.current[_androidIdentityZone] == true) return mutation();
+      return _androidIdentityQueue.run(() => runZoned(mutation, zoneValues: {_androidIdentityZone: true}));
+    }
     return _runDurableMutation(TvosDatabaseRecoveryGroup.identity, mutation);
   }
 

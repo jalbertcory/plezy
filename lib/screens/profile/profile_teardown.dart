@@ -1,3 +1,4 @@
+import '../../services/android_credentials/android_credential_store.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -364,6 +365,7 @@ Future<void> logoutAllProfiles(BuildContext context) async {
   await companionRemote.resetForLogout();
   // Credentials and the signed-out users' server-side preferences go first so
   // nothing below can read them back as the next sign-in's defaults.
+  await scope.downloads.stopAndroidDownloadsForLogout();
   await scope.storage.clearUserData();
   accountPreferences.repository.clear();
   // Downloads are device-local data, not credentials. Keep their physical
@@ -376,6 +378,7 @@ Future<void> logoutAllProfiles(BuildContext context) async {
   await scope.profileConnections.clear();
   await scope.profileRegistry.clear();
   await scope.connections.clear();
+  if (AndroidCredentialStore.enabled) await AndroidCredentialStore.removeAllOwnedForLogout();
   await scope.plexHome.clearAll();
   await scope.storage.clearActiveProfileId();
   await scope.storage.clearAllProfileLastUsed();

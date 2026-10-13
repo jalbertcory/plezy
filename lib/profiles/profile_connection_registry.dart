@@ -1,3 +1,5 @@
+import '../services/android_credentials/android_credential_store.dart';
+import '../services/android_credentials/android_credential_bindings.dart';
 import 'dart:async';
 
 import 'package:drift/drift.dart';
@@ -73,10 +75,15 @@ class ProfileConnectionRegistry {
         // Preserve the row's existing `isDefault` on update so token/metadata
         // refreshes don't clobber the default flag. First-row inserts inherit
         // default automatically.
-        final existing = await get(pc.profileId, pc.connectionId);
+        final existingDefault = AndroidCredentialStore.enabled
+            ? (await (_db.select(_db.profileConnections)
+                        ..where((t) => t.profileId.equals(pc.profileId) & t.connectionId.equals(pc.connectionId)))
+                      .getSingleOrNull())
+                  ?.isDefault
+            : (await get(pc.profileId, pc.connectionId))?.isDefault;
         final bool isDefault;
-        if (existing != null) {
-          isDefault = existing.isDefault;
+        if (existingDefault != null) {
+          isDefault = existingDefault;
         } else {
           isDefault = !await _hasAnyForProfile(pc.profileId);
         }
@@ -105,7 +112,21 @@ class ProfileConnectionRegistry {
   }
 
   Future<ProfileConnectionsCompanion> _companion(ProfileConnection pc, {bool? isDefault}) async {
-    final protectedToken = pc.userToken == null ? '' : await CredentialVault.protect(pc.userToken!);
+    var protectedToken = pc.userToken == null || pc.userToken!.isEmpty
+        ? ''
+        : AndroidCredentialStore.enabled
+        ? await AndroidCredentialStore.save(profileCredentialOwner(pc.profileId, pc.connectionId), pc.userToken!)
+        : await CredentialVault.protect(pc.userToken!);
+    if (AndroidCredentialStore.enabled &&
+        protectedToken.isEmpty &&
+        AndroidCredentialStore.reauthenticationRequired.contains(
+          profileCredentialOwner(pc.profileId, pc.connectionId).id,
+        )) {
+      final existing = await (_db.select(
+        _db.profileConnections,
+      )..where((t) => t.profileId.equals(pc.profileId) & t.connectionId.equals(pc.connectionId))).getSingleOrNull();
+      protectedToken = existing?.userToken ?? '';
+    }
     return ProfileConnectionsCompanion(
       profileId: Value(pc.profileId),
       connectionId: Value(pc.connectionId),
@@ -124,11 +145,22 @@ class ProfileConnectionRegistry {
   /// call). Updates `tokenAcquiredAt` to now.
   Future<void> recordToken(String profileId, String connectionId, String token) async {
     await _db.runIdentityMutation(() async {
+      if (AndroidCredentialStore.enabled &&
+          await (_db.select(
+                _db.profileConnections,
+              )..where((t) => t.profileId.equals(profileId) & t.connectionId.equals(connectionId))).getSingleOrNull() ==
+              null) {
+        return;
+      }
       await (_db.update(
         _db.profileConnections,
       )..where((t) => t.profileId.equals(profileId) & t.connectionId.equals(connectionId))).write(
         ProfileConnectionsCompanion(
-          userToken: Value(await CredentialVault.protect(token)),
+          userToken: Value(
+            AndroidCredentialStore.enabled
+                ? await AndroidCredentialStore.save(profileCredentialOwner(profileId, connectionId), token)
+                : await CredentialVault.protect(token),
+          ),
           tokenAcquiredAt: Value(DateTime.now().millisecondsSinceEpoch),
         ),
       );
@@ -156,6 +188,9 @@ class ProfileConnectionRegistry {
 
   Future<void> remove(String profileId, String connectionId) async {
     await _db.runIdentityMutation(() async {
+      if (AndroidCredentialStore.enabled) {
+        await AndroidCredentialStore.remove(profileCredentialOwner(profileId, connectionId));
+      }
       await (_db.delete(
         _db.profileConnections,
       )..where((t) => t.profileId.equals(profileId) & t.connectionId.equals(connectionId))).go();
@@ -217,6 +252,9 @@ class ProfileConnectionRegistry {
   /// way repairs any profile the removal left without a default.
   Future<int> removeAllForConnection(String connectionId) async {
     return _db.runIdentityMutation(() async {
+      if (AndroidCredentialStore.enabled) {
+        await AndroidCredentialBindings.removeProfileItems(_db, connectionId: connectionId);
+      }
       final removed = await (_db.delete(
         _db.profileConnections,
       )..where((t) => t.connectionId.equals(connectionId))).go();
@@ -229,16 +267,50 @@ class ProfileConnectionRegistry {
   /// with no stale (profile, connection, token) rows.
   Future<void> clear() async {
     await _db.runIdentityMutation(() async {
+      if (AndroidCredentialStore.enabled) await AndroidCredentialBindings.removeProfileItems(_db);
       await _db.delete(_db.profileConnections).go();
     });
   }
 
   Future<ProfileConnection> _rowToModel(ProfileConnectionRow row) async {
+    if (!AndroidCredentialStore.enabled) return _decodeRow(row);
+    return _db.runIdentityMutation(() async {
+      final current = await (_db.select(
+        _db.profileConnections,
+      )..where((t) => t.profileId.equals(row.profileId) & t.connectionId.equals(row.connectionId))).getSingleOrNull();
+      // A removed join can be projected without a token, never migrated back.
+      return _decodeRow(current ?? row.copyWith(userToken: ''));
+    });
+  }
+
+  Future<ProfileConnection> _decodeRow(ProfileConnectionRow row) async {
     final hasPlaintextToken = row.userToken.isNotEmpty && !CredentialVault.isProtected(row.userToken);
-    final userToken = row.userToken.isEmpty ? null : await CredentialVault.reveal(row.userToken);
-    if (hasPlaintextToken) {
+    final android = AndroidCredentialStore.enabled && row.userToken.isNotEmpty
+        ? await AndroidCredentialStore.migrate(
+            profileCredentialOwner(row.profileId, row.connectionId),
+            row.userToken,
+            CredentialVault.reveal,
+          )
+        : null;
+    final userToken = android != null
+        ? android.value
+        : row.userToken.isEmpty
+        ? null
+        : await CredentialVault.reveal(row.userToken);
+    if (android?.changed == true) {
+      await _db.runIdentityMutation(() async {
+        await (_db.update(_db.profileConnections)..where(
+              (t) =>
+                  t.profileId.equals(row.profileId) &
+                  t.connectionId.equals(row.connectionId) &
+                  t.userToken.equals(row.userToken),
+            ))
+            .write(ProfileConnectionsCompanion(userToken: Value(android!.stored)));
+      });
+    }
+    if (!AndroidCredentialStore.enabled && hasPlaintextToken) {
       unawaited(recordToken(row.profileId, row.connectionId, userToken!));
-    } else if (userToken == null && row.userToken.isNotEmpty) {
+    } else if (!AndroidCredentialStore.enabled && userToken == null && row.userToken.isNotEmpty) {
       // Vault couldn't decrypt the stored token (key/ciphertext divergence).
       // Clear it to the empty-string lazy-fetch sentinel so the binder
       // re-acquires a token on next use instead of re-failing every boot.
