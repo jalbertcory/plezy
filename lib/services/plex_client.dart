@@ -31,6 +31,7 @@ import 'bif_thumbnail_service.dart';
 import 'file_info_parser.dart';
 import 'download_artwork_helpers.dart';
 import 'settings_service.dart';
+import 'android_track_preferences.dart';
 import 'library_query_translator.dart';
 import 'scrub_preview_source.dart';
 import '../utils/media_server_http_client.dart';
@@ -3717,9 +3718,13 @@ class PlexClient
         throw PlaybackException(t.messages.fileInfoNotAvailable, reason: PlaybackFailureReason.noPlayableSource);
       }
       final carriedAudioTrack = options.selectedAudioStreamId == null ? options.preferredAudioTrack : null;
-      final carriedAudioStreamId = carriedAudioTrack == null || data.mediaInfo == null
-          ? null
-          : findSourceAudioTrackForIntent(carriedAudioTrack, data.mediaInfo!.audioTracks)?.id;
+      final carriedAudioStreamId =
+          (carriedAudioTrack == null || data.mediaInfo == null
+              ? null
+              : findSourceAudioTrackForIntent(carriedAudioTrack, data.mediaInfo!.audioTracks)?.id) ??
+          (options.metadata.kind != MediaKind.track && options.selectedAudioStreamId == null
+              ? androidDefaultAudioStreamId(data.mediaInfo)
+              : null);
 
       // Tracks consult the music preset — [qualityPreset] is video-shaped
       // (resolution/videoQuality) and is ignored for audio.
@@ -3758,7 +3763,7 @@ class PlexClient
         }
 
         final resolvedAudioId = carriedAudioTrack == null
-            ? _resolveAudioStreamId(options.selectedAudioStreamId, data.mediaInfo)
+            ? carriedAudioStreamId ?? _resolveAudioStreamId(options.selectedAudioStreamId, data.mediaInfo)
             : carriedAudioStreamId;
         final requestedSubtitleTrack = _resolveTranscodeSubtitleTrack(data.mediaInfo, options.preferredSubtitleTrack);
         final result = await buildTranscodeStartPath(
@@ -3924,16 +3929,16 @@ class PlexClient
   }
 
   /// Pick the subtitle stream the transcode should carry. An explicit
-  /// [preferred] wins; otherwise the server's own selection stands.
+  /// [preferred] wins, then Android defaults, then the server's selection.
   MediaSubtitleTrack? _resolveTranscodeSubtitleTrack(MediaSourceInfo? info, SubtitlePreference? preferred) {
     if (info == null) return null;
     switch (preferred) {
       case null:
-        return _selectedSubtitleTrack(info);
+        return _defaultTranscodeSubtitleTrack(info);
       case SubtitleOffPreference():
         return null;
       case SubtitleIntentPreference(:final intent):
-        return findSourceTrackForIntent(intent, info.subtitleTracks) ?? _selectedSubtitleTrack(info);
+        return findSourceTrackForIntent(intent, info.subtitleTracks) ?? _defaultTranscodeSubtitleTrack(info);
       case SubtitleTrackPreference(:final track):
         const sourcePrefix = 'source:';
         MediaSubtitleTrack? matched;
@@ -3949,7 +3954,19 @@ class PlexClient
           }
         }
         matched ??= findPlexTrackForMpvSubtitle(track, info.subtitleTracks);
-        return matched ?? _selectedSubtitleTrack(info);
+        return matched ?? _defaultTranscodeSubtitleTrack(info);
+    }
+  }
+
+  MediaSubtitleTrack? _defaultTranscodeSubtitleTrack(MediaSourceInfo info) {
+    switch (androidDefaultSubtitlePreference(info)) {
+      case SubtitleOffPreference():
+        return null;
+      case SubtitleTrackPreference(:final track):
+        final id = int.tryParse(track.id.replaceFirst('source:', ''));
+        return info.subtitleTracks.where((row) => row.id == id).firstOrNull;
+      default:
+        return _selectedSubtitleTrack(info);
     }
   }
 

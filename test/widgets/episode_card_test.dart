@@ -1,5 +1,6 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:plezy/database/app_database.dart';
@@ -110,6 +111,57 @@ void main() {
     final metadataWrap = find.ancestor(of: find.text('1.50 GB'), matching: find.byType(Wrap));
     expect(metadataWrap, findsOneWidget);
     expect(find.descendant(of: metadataWrap, matching: find.text('EAC3 5.1')), findsOneWidget);
+  });
+
+  testWidgets('Android episode cards show audio languages and distinguish dialogue from signs', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      final episode = testMediaItem(
+        id: 'anime-tracks',
+        backend: MediaBackend.plex,
+        kind: MediaKind.episode,
+        title: 'Anime episode',
+        mediaVersions: const [
+          MediaVersion(
+            id: 'v1',
+            parts: [
+              MediaPart(
+                id: 'p1',
+                streams: [
+                  MediaStream(id: '1', kind: MediaStreamKind.audio, languageCode: 'jpn'),
+                  MediaStream(id: '2', kind: MediaStreamKind.audio, languageCode: 'eng'),
+                  MediaStream(
+                    id: '3',
+                    kind: MediaStreamKind.subtitle,
+                    languageCode: 'eng',
+                    title: 'Signs & Songs',
+                    codec: 'ass',
+                  ),
+                  MediaStream(
+                    id: '4',
+                    kind: MediaStreamKind.subtitle,
+                    languageCode: 'eng',
+                    title: 'Full',
+                    codec: 'ass',
+                  ),
+                  MediaStream(id: '5', kind: MediaStreamKind.subtitle, languageCode: 'und', title: 'Unknown'),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+      await _pumpEpisodeCard(tester, episode);
+      expect(find.text('Audio: Japanese, English'), findsOneWidget);
+      expect(find.textContaining('Signs/Songs'), findsOneWidget);
+      expect(find.textContaining('Full dialogue'), findsOneWidget);
+      expect(find.textContaining('Unknown language'), findsOneWidget);
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      await _pumpEpisodeCard(tester, episode);
+      expect(find.textContaining('Subtitles:'), findsNothing);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 
   testWidgets('downloaded episode shows the resume progress bar', (tester) async {

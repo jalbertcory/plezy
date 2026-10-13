@@ -313,6 +313,7 @@ extension _VideoPlayerBuildMethods on VideoPlayerScreenState {
                         onRateRequested: _setPlaybackRate,
                         onPlayPauseRequested: _handleControlsTransport,
                         onBack: _handleBackButton,
+                        onMinimize: _androidSession == null ? null : () => unawaited(_minimizeAndroidVideo()),
                         onReachedEnd: ({skipAutoPlayCountdown = false}) =>
                             _onVideoCompleted(true, skipAutoPlayCountdown: skipAutoPlayCountdown),
                         canControl: authority.canControlPlayback,

@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:plezy/widgets/app_icon.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../focus/focus_theme.dart';
@@ -13,6 +14,7 @@ import 'package:provider/provider.dart';
 
 import '../services/settings_service.dart';
 import 'settings_builder.dart';
+import 'android_episode_tracks.dart';
 import '../media/media_item.dart';
 import '../media/media_item_types.dart';
 import '../widgets/collapsible_text.dart';
@@ -297,6 +299,10 @@ class _EpisodeCardState extends State<EpisodeCard> with ContextMenuTapMixin<Epis
 
                           const SizedBox(height: 6),
                           _buildEpisodeMetaRow(context, episode, qualityLabels),
+                          if (defaultTargetPlatform == TargetPlatform.android) ...[
+                            const SizedBox(height: 4),
+                            AndroidEpisodeTracks(episode: episode, client: widget.client, isOffline: widget.isOffline),
+                          ],
                         ],
                       ),
                     ),

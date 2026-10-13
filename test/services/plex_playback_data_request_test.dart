@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:plezy/media/ids.dart';
 
 import 'package:drift/drift.dart' show Value;
@@ -168,6 +169,24 @@ void main() {
     expect(requests.single.url.queryParameters['allParts'], '1');
   });
 
+  test('Android Japanese default reaches the Plex transcode request', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    resetSharedPreferencesForTest();
+    SettingsService.resetForTesting();
+    try {
+      final settings = await SettingsService.getInstance();
+      await settings.write(SettingsService.androidAudioLanguage, 'ja');
+      final initialized = await initializeTranscodeAudio();
+      expect(initialized.decisionUri.queryParameters['audioStreamID'], '305');
+      expect(initialized.result.activeAudioStreamId, 305);
+      final explicit = await initializeTranscodeAudio(selectedAudioStreamId: 301);
+      expect(explicit.decisionUri.queryParameters['audioStreamID'], '301');
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+      SettingsService.resetForTesting();
+    }
+  });
+
   test('semantic carried audio is sent to the Plex transcode decision', () async {
     final initialized = await initializeTranscodeAudio(
       preferredAudioTrack: const AudioTrack(id: 'source:999', language: 'jpn', title: 'Main', codec: 'flac'),
@@ -175,6 +194,49 @@ void main() {
 
     expect(initialized.decisionUri.queryParameters['audioStreamID'], '305');
     expect(initialized.result.activeAudioStreamId, 305);
+  });
+
+  test('Android full-subtitle default survives missing carry before transcoding', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    resetSharedPreferencesForTest();
+    SettingsService.resetForTesting();
+    final client = makeClient((_) async => http.Response('unused', 500));
+    addTearDown(client.close);
+    try {
+      final settings = await SettingsService.getInstance();
+      await settings.write(SettingsService.androidSubtitleLanguage, 'en');
+      final signs = MediaSubtitleTrack(
+        id: 401,
+        languageCode: 'eng',
+        title: 'Signs & Songs',
+        selected: true,
+        forced: false,
+      );
+      final full = MediaSubtitleTrack(
+        id: 402,
+        languageCode: 'eng',
+        title: 'Full dialogue',
+        selected: false,
+        forced: false,
+      );
+      const missing = SubtitlePreference.intent(SubtitleIntent(language: 'fr', forced: false, title: 'Full dialogue'));
+      expect(client.resolveTranscodeSubtitleTrackForTesting(mediaInfoWithSubtitles([signs, full]), missing)?.id, 402);
+      expect(client.resolveTranscodeSubtitleTrackForTesting(mediaInfoWithSubtitles([signs]), missing), isNull);
+      expect(
+        client
+            .resolveTranscodeSubtitleTrackForTesting(
+              mediaInfoWithSubtitles([signs, full]),
+              const SubtitlePreference.track(SubtitleTrack(id: 'source:401', language: 'eng', title: 'Signs & Songs')),
+            )
+            ?.id,
+        401,
+      );
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      expect(client.resolveTranscodeSubtitleTrackForTesting(mediaInfoWithSubtitles([signs, full]), missing)?.id, 401);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+      SettingsService.resetForTesting();
+    }
   });
 
   test('explicit Plex audio stream wins over a conflicting semantic carry', () async {

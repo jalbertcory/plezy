@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -2036,6 +2037,88 @@ void main() {
       expect(initialized.playbackInfoUri.queryParameters['AudioStreamIndex'], '1');
       expect(initialized.playbackInfoBody['AudioStreamIndex'], 1);
       expect(initialized.result.activeAudioStreamId, 1);
+    });
+
+    test('Android Japanese default reaches Jellyfin playback negotiation', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      resetSharedPreferencesForTest();
+      SettingsService.resetForTesting();
+      try {
+        final settings = await SettingsService.getInstance();
+        await settings.write(SettingsService.androidAudioLanguage, 'ja');
+        final initialized = await _initializeJellyfinAudioCarry();
+        expect(initialized.playbackInfoUri.queryParameters['AudioStreamIndex'], '4');
+        expect(initialized.playbackInfoBody['AudioStreamIndex'], 4);
+        final explicit = await _initializeJellyfinAudioCarry(selectedAudioStreamId: 1);
+        expect(explicit.playbackInfoBody['AudioStreamIndex'], 1);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+        SettingsService.resetForTesting();
+      }
+    });
+
+    test('Android subtitle defaults negotiate full dialogue or off with a missing carry', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      resetSharedPreferencesForTest();
+      SettingsService.resetForTesting();
+      try {
+        final settings = await SettingsService.getInstance();
+        await settings.write(SettingsService.androidSubtitleLanguage, 'en');
+        for (final includeFull in [true, false]) {
+          final source = <String, dynamic>{
+            'Id': 'src-1',
+            'Container': 'mkv',
+            'DefaultSubtitleStreamIndex': 3,
+            'MediaStreams': [
+              {'Index': 0, 'Type': 'Video'},
+              {'Index': 3, 'Type': 'Subtitle', 'Codec': 'srt', 'Language': 'eng', 'Title': 'Signs & Songs'},
+              if (includeFull)
+                {'Index': 4, 'Type': 'Subtitle', 'Codec': 'srt', 'Language': 'eng', 'Title': 'Full dialogue'},
+            ],
+          };
+          int? requested;
+          final scoped = _clientWithPlaybackInfo((request) async {
+            requested = (jsonDecode(request.body) as Map<String, dynamic>)['SubtitleStreamIndex'] as int?;
+            return jsonResponse({
+              'MediaSources': [source],
+            });
+          }, itemSources: [source]);
+          addTearDown(scoped.close);
+          await scoped.getPlaybackInitialization(
+            PlaybackInitializationOptions(
+              selectedMediaIndex: 0,
+              metadata: testMediaItem(
+                id: 'item-1',
+                backend: MediaBackend.jellyfin,
+                kind: MediaKind.movie,
+                serverId: 'srv-1',
+              ),
+              preferredSubtitleTrack: const SubtitlePreference.intent(
+                SubtitleIntent(language: 'fr', forced: false, title: 'Full dialogue'),
+              ),
+            ),
+          );
+          expect(requested, includeFull ? 4 : -1);
+          await scoped.getPlaybackInitialization(
+            PlaybackInitializationOptions(
+              selectedMediaIndex: 0,
+              metadata: testMediaItem(
+                id: 'item-1',
+                backend: MediaBackend.jellyfin,
+                kind: MediaKind.movie,
+                serverId: 'srv-1',
+              ),
+              preferredSubtitleTrack: const SubtitlePreference.track(
+                SubtitleTrack(id: 'source:3', language: 'eng', title: 'Signs & Songs', codec: 'srt'),
+              ),
+            ),
+          );
+          expect(requested, 3);
+        }
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+        SettingsService.resetForTesting();
+      }
     });
 
     test('unresolvable semantic audio carry lets Jellyfin choose the stream', () async {

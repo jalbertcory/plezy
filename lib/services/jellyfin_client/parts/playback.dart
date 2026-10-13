@@ -291,11 +291,14 @@ mixin _JellyfinPlaybackMethods on _JellyfinClientInternals {
     final audioPreset = options.audioQualityPreset ?? AudioQualityPreset.original;
     final wantsOriginal = isTrack ? audioPreset.isOriginal : preset.isOriginal;
     final requestedAudioStreamId = options.selectedAudioStreamId == null
-        ? options.preferredAudioTrack == null
-              ? null
-              : findSourceAudioTrackForIntent(options.preferredAudioTrack!, mediaInfo.audioTracks)?.id
+        ? (options.preferredAudioTrack == null
+                  ? null
+                  : findSourceAudioTrackForIntent(options.preferredAudioTrack!, mediaInfo.audioTracks)?.id) ??
+              (!isTrack ? androidDefaultAudioStreamId(mediaInfo) : null)
         : _validJellyfinAudioStreamId(options.selectedAudioStreamId, mediaInfo);
-    final requestedSubtitleStreamId = _validJellyfinSubtitleStreamId(options.preferredSubtitleTrack, mediaInfo);
+    final requestedSubtitleStreamId =
+        _validJellyfinSubtitleStreamId(options.preferredSubtitleTrack, mediaInfo) ??
+        (!isTrack ? androidDefaultSubtitleStreamId(mediaInfo) : null);
     // A real external subtitle file stays a file the client fetches, on a transcode as much as on
     // a direct play - it is the one case where the client genuinely holds it. Jellyfin decides
     // delivery from the profile and matches on format alone, never on whether a stream is embedded
