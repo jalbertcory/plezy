@@ -90,7 +90,7 @@ extension _VideoPlayerPipMethods on VideoPlayerScreenState {
   Future<void> _updateAutoPipState({required bool isPlaying}) async {
     if (!_pipInitialized) return;
 
-    if (!isPlaying) {
+    if (!isPlaying || _isAndroidMini) {
       await PipService.setAutoPipReady(ready: false);
       return;
     }
@@ -179,7 +179,7 @@ extension _VideoPlayerPipMethods on VideoPlayerScreenState {
 
     if (isInPip) {
       _preparePipFiltersForEntry();
-    } else {
+    } else if (!_isAndroidMini) {
       _restorePipFiltersAfterExit();
     }
   }

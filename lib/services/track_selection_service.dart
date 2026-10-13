@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 
 import '../mpv/mpv.dart';
 
 import '../media/media_backend.dart';
 import '../media/media_item.dart';
+import '../media/media_item_types.dart';
 import '../media/media_server_user_profile.dart';
 import '../media/media_source_info.dart';
 import '../utils/future_extensions.dart';
@@ -11,6 +13,7 @@ import '../utils/app_logger.dart';
 import '../utils/language_codes.dart';
 import '../utils/subtitle_forced_semantics.dart';
 import 'subtitle_preference.dart';
+import 'android_track_preferences.dart';
 
 // These functions match MPV tracks to Plex tracks by properties (language,
 // codec, title, etc.) instead of list index, since the two may be ordered
@@ -366,7 +369,9 @@ MediaSubtitleTrack? findSourceTrackForIntent(SubtitleIntent intent, List<MediaSu
     sourceTracks,
     intentLanguage: intent.language,
     isSelectable: (_) => true,
-    classMatches: (row) => row.effectiveForced == intent.forced,
+    classMatches: (row) =>
+        row.effectiveForced == intent.forced &&
+        _androidSubtitleRoleMatches(intent.title, row.title ?? row.displayTitle),
     language: (row) => row.languageCode ?? row.language,
     titleScore: (row) => _titleScore(intent.title, row.title, row.displayTitle),
     codecMatches: (row) => _subtitleCodecsMatch(intent.codec, row.codec),
@@ -381,12 +386,22 @@ SubtitleTrack? findNativeTrackForIntent(SubtitleIntent intent, List<SubtitleTrac
     tracks,
     intentLanguage: intent.language,
     isSelectable: (track) => track.id != SubtitleTrack.auto.id && track.id != SubtitleTrack.off.id,
-    classMatches: (track) => track.effectiveForced == intent.forced,
+    classMatches: (track) =>
+        track.effectiveForced == intent.forced && _androidSubtitleRoleMatches(intent.title, track.title),
     language: (track) => track.language,
     titleScore: (track) => _titleScore(intent.title, track.title, null),
     codecMatches: (track) => _subtitleCodecsMatch(intent.codec, track.codec),
     extraScore: (track) => intent.isExternal == track.isExternal ? 1 : 0,
   );
+}
+
+bool _androidSubtitleRoleMatches(String? intendedTitle, String? candidateTitle) {
+  if (defaultTargetPlatform != TargetPlatform.android) return true;
+  final intended = androidSubtitleRole(intendedTitle);
+  final candidate = androidSubtitleRole(candidateTitle);
+  if (intended == AndroidSubtitleRole.signs) return candidate == AndroidSubtitleRole.signs;
+  if (intended == AndroidSubtitleRole.dialogue) return candidate != AndroidSubtitleRole.signs;
+  return true;
 }
 
 /// Audio twin of [findSourceTrackForIntent]: the source-catalog row that
@@ -974,6 +989,9 @@ class TrackSelectionService {
       appLogger.d('Audio carry declined: ${preferredAudioTrack.language}/${preferredAudioTrack.title}');
     }
 
+    final localAudio = (metadata.isVideoContent ? AndroidTrackPreferences.current : null)?.selectAudio(availableTracks);
+    if (localAudio != null) return TrackSelectionResult(localAudio, TrackSelectionPriority.profile);
+
     // Priority 2: Check server-selected track from media info
     final info = plexMediaInfo;
     if (info != null && availableTracks.isNotEmpty) {
@@ -1094,6 +1112,11 @@ class TrackSelectionService {
         }
         appLogger.d('Subtitle intent declined: $intent');
     }
+
+    final localSubtitle = (metadata.isVideoContent ? AndroidTrackPreferences.current : null)?.selectSubtitle(
+      availableTracks,
+    );
+    if (localSubtitle != null) return TrackSelectionResult(localSubtitle, TrackSelectionPriority.profile);
 
     // Priority 2: Trust the server's selected track. Plex computes this from
     // account/show/per-item prefs; MediaBrowser exposes DefaultSubtitleStreamIndex.

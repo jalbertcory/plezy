@@ -1,4 +1,6 @@
 import '../i18n/strings.g.dart';
+import 'package:flutter/foundation.dart';
+import 'android_track_metadata.dart';
 
 import 'codec_utils.dart';
 import 'language_codes.dart';
@@ -143,7 +145,12 @@ class TrackLabelBuilder {
     if (channelsLabel != null) tech.add(channelsLabel);
 
     return _compose(
-      languageDisplay: resolveTrackLanguageDisplay(language: language, languageCode: languageCode),
+      languageDisplay: _trackLanguageDisplay(
+        language: language,
+        languageCode: languageCode,
+        title: title,
+        index: index,
+      ),
       title: cleanTrackMetadataValue(title),
       displayTitle: cleanTrackMetadataValue(displayTitle),
       rawLanguageValues: [language, languageCode],
@@ -164,7 +171,12 @@ class TrackLabelBuilder {
   }) {
     final cleanedTitle = cleanSubtitleTitle(title, codec: codec);
     return _compose(
-      languageDisplay: resolveTrackLanguageDisplay(language: language, languageCode: languageCode),
+      languageDisplay: _trackLanguageDisplay(
+        language: language,
+        languageCode: languageCode,
+        title: title,
+        index: index,
+      ),
       title: cleanedTitle,
       displayTitle: cleanSubtitleTitle(displayTitle, codec: codec),
       rawLanguageValues: [language, languageCode],
@@ -211,6 +223,18 @@ class TrackLabelBuilder {
 
     final secondaryParts = [?secondaryTitle, ...techParts];
     return TrackLabel(primary, secondaryParts.isEmpty ? null : secondaryParts.join(' · '));
+  }
+
+  static String? _trackLanguageDisplay({String? language, String? languageCode, String? title, required int index}) {
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      return resolveTrackLanguageDisplay(language: language, languageCode: languageCode);
+    }
+    final known = androidTrackLanguage(languageCode ?? language, title);
+    if (known != null) return LanguageCodes.getDisplayName(known);
+    final display = resolveTrackLanguageDisplay(language: language, languageCode: languageCode);
+    if (display == null && !['unknown', 'und', 'unk'].contains(title?.trim().toLowerCase())) return null;
+    final unknown = display == null || ['und', 'unknown', 'unk', 'zxx'].contains(display.toLowerCase());
+    return unknown ? '${t.common.unknown} (#${index + 1})' : display;
   }
 
   static bool _restatesLanguage(String title, String languageDisplay, List<String?> rawLanguageValues) {

@@ -9,6 +9,7 @@ import '../../services/scrub_preview_source.dart';
 import '../../utils/desktop_window_padding.dart';
 import '../../utils/platform_detector.dart';
 import '../../i18n/strings.g.dart';
+import '../app_icon.dart';
 import 'player_chrome_controller.dart';
 import 'widgets/circular_control_button.dart';
 import 'widgets/content_strip.dart';
@@ -47,6 +48,7 @@ class MobileVideoControls extends StatefulWidget {
   final VoidCallback? onCancelAutoHide;
   final VoidCallback? onStartAutoHide;
   final VoidCallback? onBack;
+  final VoidCallback? onMinimize;
   final VoidCallback? onNext;
   final VoidCallback? onPrevious;
 
@@ -106,6 +108,7 @@ class MobileVideoControls extends StatefulWidget {
     this.onCancelAutoHide,
     this.onStartAutoHide,
     this.onBack,
+    this.onMinimize,
     this.onNext,
     this.onPrevious,
     this.canControl = true,
@@ -327,7 +330,18 @@ class _MobileVideoControlsState extends State<MobileVideoControls> with SingleTi
           style: VideoHeaderStyle.multiLine,
           onCancelAutoHide: widget.onCancelAutoHide,
           onStartAutoHide: widget.onStartAutoHide,
-          trailing: widget.trackChapterControls,
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.onMinimize != null)
+                IconButton(
+                  tooltip: 'Minimize video',
+                  icon: const AppIcon(Symbols.keyboard_arrow_down_rounded),
+                  onPressed: widget.onMinimize,
+                ),
+              widget.trackChapterControls,
+            ],
+          ),
           onBack: widget.onBack,
           showClock: !isPortraitPhone,
         ),

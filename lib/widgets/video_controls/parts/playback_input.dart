@@ -291,6 +291,20 @@ extension _PlexVideoControlsPlaybackInputMethods on _PlexVideoControlsState {
 
   void _handleTouchPointerDown(PointerDownEvent event) {
     if (event.kind != PointerDeviceKind.touch) return;
+    if (_minimizeSwipePointer != null) {
+      _minimizeSwipeBlocked = true;
+    } else if (widget.onMinimize != null && _mobileTouchGesturesAllowed) {
+      final hit = _edgeAdjustmentSurfaceHit(event.position);
+      if (hit != null &&
+          hit.position.dx > hit.size.width * 0.2 &&
+          hit.position.dx < hit.size.width * 0.8 &&
+          hit.position.dy > 80 &&
+          hit.position.dy < hit.size.height - 80) {
+        _minimizeSwipePointer = event.pointer;
+        _minimizeSwipeStart = event.position;
+        _minimizeSwipeBlocked = false;
+      }
+    }
     _twoFingerTapTracker.pointerDown(event.pointer, event.position);
     if (_twoFingerTapTracker.isChordActive) {
       _suppressTouchTaps();
@@ -332,6 +346,22 @@ extension _PlexVideoControlsPlaybackInputMethods on _PlexVideoControlsState {
 
   void _handleTouchPointerUp(PointerUpEvent event) {
     if (event.kind != PointerDeviceKind.touch) return;
+    final minimizeStart = _minimizeSwipeStart;
+    final minimizeDelta = minimizeStart == null ? Offset.zero : event.position - minimizeStart;
+    final minimize =
+        event.pointer == _minimizeSwipePointer &&
+        !_minimizeSwipeBlocked &&
+        _mobileTouchGesturesAllowed &&
+        minimizeDelta.dy >= 72 &&
+        minimizeDelta.dx.abs() < minimizeDelta.dy * 0.4;
+    if (event.pointer == _minimizeSwipePointer) {
+      _minimizeSwipePointer = null;
+      _minimizeSwipeStart = null;
+    }
+    if (minimize) {
+      _suppressTouchTaps();
+      widget.onMinimize?.call();
+    }
     final isTwoFingerTap = _twoFingerTapTracker.pointerUp(event.pointer, event.position);
     final hit = _edgeAdjustmentSurfaceHit(event.position);
     _handleEdgeAdjustmentEvent(_edgeAdjustmentTracker.pointerUp(event.pointer, hit?.position ?? event.localPosition));
@@ -354,6 +384,10 @@ extension _PlexVideoControlsPlaybackInputMethods on _PlexVideoControlsState {
 
   void _handleTouchPointerCancel(PointerCancelEvent event) {
     if (event.kind != PointerDeviceKind.touch) return;
+    if (event.pointer == _minimizeSwipePointer) {
+      _minimizeSwipePointer = null;
+      _minimizeSwipeStart = null;
+    }
     _twoFingerTapTracker.pointerCancel(event.pointer);
     _handleEdgeAdjustmentEvent(_edgeAdjustmentTracker.pointerCancel(event.pointer));
     if (_twoFingerTapTracker.isChordActive) _suppressTouchTaps();

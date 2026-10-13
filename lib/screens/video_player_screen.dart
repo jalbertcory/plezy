@@ -47,6 +47,8 @@ import '../providers/offline_mode_provider.dart';
 import '../providers/playback_state_provider.dart';
 import '../providers/companion_remote_provider.dart';
 import '../services/fullscreen_state_manager.dart';
+import '../navigation/android_video_session.dart';
+import '../widgets/android_video_mini_player.dart';
 import '../services/car_ux_restrictions_service.dart';
 import '../services/driver_distraction.dart';
 import '../services/discord_rpc_service.dart';
@@ -707,8 +709,8 @@ class VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     // Do not bypass Watch Together's leave-session confirmation.
     if (_watchTogetherProvider?.isInSession == true && !_watchTogetherProvider!.isHost) return false;
-    final route = ModalRoute.of(context);
-    if (route == null || !route.isCurrent || !Navigator.of(context).canPop()) return false;
+    final route = _playerRoute;
+    if (!_isAndroidMini && (route == null || !route.isCurrent || !_playerNavigator.canPop())) return false;
     await _exitPlayerRoute(navigateHome: false, stop: true);
     // Automation/application callers still observe truthful retirement, even
     // when navigation had to leave an unresponsive player behind.
@@ -811,6 +813,53 @@ class VideoPlayerScreenState extends State<VideoPlayerScreen>
       _mediaControlSubscriptions.clear();
     }
     return [for (final subscription in subscriptions) subscription.cancel()];
+  }
+
+  AndroidVideoSession? _androidSession;
+  bool _wasAndroidMini = false;
+  bool _miniTransitioning = false;
+  bool get _isAndroidMini => _androidSession?.isMini == true;
+  NavigatorState get _playerNavigator => _androidSession?.navigator ?? Navigator.of(context);
+  ModalRoute<dynamic>? get _playerRoute => _isAndroidMini ? null : ModalRoute.of(context);
+
+  Future<void> _minimizeAndroidVideo() async {
+    final session = _androidSession;
+    if (session == null ||
+        session.isMini ||
+        _miniTransitioning ||
+        _shuttingDown ||
+        (OverlaySheetController.maybeOf(_sheetContext)?.isOpen ?? false) ||
+        _episode.showPlayNextDialog ||
+        _showStillWatchingPrompt ||
+        PipService().isPipActive.value ||
+        _androidAutoPipTransitionInFlight ||
+        !_firstFrame.uiReady.value) {
+      return;
+    }
+    _miniTransitioning = true;
+    try {
+      _preparePipFiltersForEntry();
+      await _restoreSystemUiAndOrientation();
+      if (mounted && !_shuttingDown) {
+        session.minimize();
+        await _updateAutoPipState(isPlaying: player?.state.playing ?? false);
+      }
+    } finally {
+      _miniTransitioning = false;
+    }
+  }
+
+  void _restoreAndroidFullscreen() {
+    _systemUiRestoreOperation = null;
+    _restorePipFiltersAfterExit();
+    if (SettingsService.instance.read(SettingsService.rotationLocked)) {
+      OrientationHelper.setLandscapeOrientation();
+    } else {
+      unawaited(OrientationHelper.restoreDefaultOrientations());
+      unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky));
+    }
+    ImmersiveModeGuard.acquire(this);
+    unawaited(_updateAutoPipState(isPlaying: player?.state.playing ?? false));
   }
 
   VideoPlayerRoute? _videoPlayerRoute;
@@ -1549,8 +1598,12 @@ class VideoPlayerScreenState extends State<VideoPlayerScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final route = ModalRoute.of(context);
+    _androidSession = AndroidVideoSessionScope.maybeOf(context);
+    _androidSession?.videoReady = _firstFrame.uiReady;
+    final route = _playerRoute;
     _videoPlayerRoute = route is VideoPlayerRoute ? route : null;
+    if (_wasAndroidMini && !_isAndroidMini && !_shuttingDown) _restoreAndroidFullscreen();
+    _wasAndroidMini = _isAndroidMini;
 
     // Update video filter when dependencies change (orientation, screen size, etc.)
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2258,9 +2311,10 @@ class VideoPlayerScreenState extends State<VideoPlayerScreen>
     final existing = _routeExitOperation;
     if (existing != null) return existing;
     if (!mounted) return Future<void>.value();
-    final navigator = Navigator.of(context);
-    final route = ModalRoute.of(context);
-    if (!navigator.canPop() || route == null || !route.isCurrent) return Future<void>.value();
+    final navigator = _playerNavigator;
+    final route = _playerRoute;
+    final miniSession = _isAndroidMini ? _androidSession : null;
+    if (miniSession == null && (!navigator.canPop() || route == null || !route.isCurrent)) return Future<void>.value();
 
     final completer = Completer<void>();
     _routeExitOperation = completer.future;
@@ -2292,7 +2346,11 @@ class VideoPlayerScreenState extends State<VideoPlayerScreen>
       try {
         await navigationReady.future;
         deadline.cancel();
-        _removePlayerRoute(navigator, route, navigateHome: navigateHome, onHome: onHome);
+        if (miniSession != null) {
+          miniSession.close(true);
+        } else {
+          _removePlayerRoute(navigator, route!, navigateHome: navigateHome, onHome: onHome);
+        }
         completer.complete();
       } catch (error, stackTrace) {
         completer.completeError(error, stackTrace);
@@ -2983,6 +3041,33 @@ class VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (_isAndroidMini && (_episode.showPlayNextDialog || _showStillWatchingPrompt)) {
+      final session = _androidSession!;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && session.isMini && (_episode.showPlayNextDialog || _showStillWatchingPrompt)) session.restore();
+      });
+    }
+    if (_isAndroidMini && player != null) {
+      return StreamBuilder<bool>(
+        stream: player!.streams.playing,
+        initialData: player!.state.playing,
+        builder: (context, playing) => AndroidVideoMiniPlayer(
+          video: LayoutBuilder(
+            builder: (context, constraints) {
+              _scheduleVideoLayoutUpdate(Size(constraints.maxWidth, constraints.maxHeight));
+              return Video(player: player!, hasFirstFrame: _firstFrame.uiReady);
+            },
+          ),
+          title: _currentMetadata.title ?? '',
+          playing: playing.data ?? false,
+          onPlayPause: _canControlPlayback()
+              ? () => unawaited(_handleControlsTransport(TransportCommand.toggle))
+              : null,
+          onClose: () => unawaited(_handleBackButton()),
+          onRestore: _androidSession!.restore,
+        ),
+      );
+    }
     final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
     // Screen-level Focus wraps ALL phases (loading + initialized).
     // - autofocus: grabs focus when no deeper child claims it.

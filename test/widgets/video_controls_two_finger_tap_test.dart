@@ -88,6 +88,7 @@ void main() {
     double videoZoomScale = 1.0,
     bool canControl = true,
     bool startPaused = false,
+    VoidCallback? onMinimize,
   }) async {
     if (startPaused) await player.pause();
     await tester.pumpWidget(
@@ -113,6 +114,7 @@ void main() {
                 canControl: canControl,
                 videoZoomScale: videoZoomScale,
                 onResetVideoZoom: () => zoomResets++,
+                onMinimize: onMinimize,
                 // Mirrors the screen wiring at video_player/parts/build.dart:311.
                 // _handleControlsTransport announces every accepted command, so
                 // recording one here is recording the transport disc the viewer
@@ -327,6 +329,25 @@ void main() {
     expect(transportCommands, hasLength(1), reason: 'chapter/queue browsing owns the surface');
 
     chrome.setContentStripVisible(false);
+    await settle(tester);
+  });
+
+  testWidgets('central swipe down minimizes while edges, short drags, and two-finger chords do not', (tester) async {
+    var minimized = 0;
+    await pumpControls(tester, onMinimize: () => minimized++);
+    chrome.hide();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.dragFrom(const Offset(400, 220), const Offset(0, 100));
+    await tester.pump();
+    expect(minimized, 1);
+    await tester.dragFrom(const Offset(400, 220), const Offset(0, 30));
+    await tester.pump();
+    expect(minimized, 1);
+    await tester.dragFrom(const Offset(30, 220), const Offset(0, 100));
+    await tester.pump(const Duration(seconds: 1));
+    expect(minimized, 1);
+    await twoFingerTap(tester);
+    expect(minimized, 1);
     await settle(tester);
   });
 

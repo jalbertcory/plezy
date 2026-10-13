@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:plezy/i18n/strings.g.dart';
 import 'package:plezy/models/audio_channel_limit.dart';
@@ -17,6 +18,31 @@ void main() {
     SettingsService.resetForTesting();
     await SettingsService.getInstance();
     LocaleSettings.setLocaleSync(AppLocale.en);
+  });
+
+  testWidgets('Android language defaults can be set to Japanese and English', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1000, 1400);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    try {
+      await tester.pumpWidget(MaterialApp(theme: monoTheme(dark: true), home: const PlaybackSettingsScreen()));
+      await tester.pumpAndSettle();
+      for (final entry in [('Default audio language', 'Japanese'), ('Default subtitle language', 'English')]) {
+        final title = find.text(entry.$1);
+        await tester.scrollUntilVisible(title, 400, scrollable: find.byType(Scrollable).first);
+        await tester.tap(title);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(entry.$2).last);
+        await tester.pumpAndSettle();
+      }
+      expect(SettingsService.instance.read(SettingsService.androidAudioLanguage), 'ja');
+      expect(SettingsService.instance.read(SettingsService.androidSubtitleLanguage), 'en');
+      expect(SettingsService.instance.read(SettingsService.androidPreferDialogueSubtitles), isTrue);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 
   testWidgets('shows and changes the persisted music quality', (tester) async {
