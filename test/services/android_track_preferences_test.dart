@@ -117,6 +117,10 @@ void main() {
     expect(findNativeTrackForIntent(full, tracks)?.id, '2');
     expect(findNativeTrackForIntent(full, [tracks.first]), isNull);
     expect(findNativeTrackForIntent(signs, tracks)?.id, '1');
+
+    // Upstream carry elsewhere: the role split is Android-only.
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    expect(findNativeTrackForIntent(full, [tracks.first])?.id, '1');
   });
 
   test('local Android defaults precede server picks but manual choices win', () async {
@@ -162,5 +166,90 @@ void main() {
     expect(androidDefaultAudioStreamId(source), isNull);
     expect(androidDefaultSubtitlePreference(source), isNull);
     expect(androidDefaultSubtitleStreamId(source), isNull);
+  });
+
+  test('saved and explicitly requested audio outrank the Android default', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    resetSharedPreferencesForTest();
+    final settings = await SettingsService.getInstance();
+    await settings.write(SettingsService.androidAudioLanguage, 'ja');
+    MediaSourceInfo source({required bool englishSaved}) => MediaSourceInfo(
+      videoUrl: '',
+      audioTracks: [
+        MediaAudioTrack(id: 1, languageCode: 'eng', selected: true, isDefault: !englishSaved),
+        MediaAudioTrack(id: 2, languageCode: 'jpn', selected: false, isDefault: englishSaved),
+      ],
+      subtitleTracks: const [],
+      chapters: const [],
+    );
+    final metadata = testMediaItem(backend: MediaBackend.plex, kind: MediaKind.episode);
+
+    final saved = source(englishSaved: true);
+    final savedAudio = PlaybackSubtitleResolver.audioTracksForSource(saved);
+    expect(androidServerAudioSelectionIsSaved(saved), isTrue);
+    expect(androidDefaultAudioStreamId(saved), isNull);
+    expect(
+      TrackSelectionService(metadata: metadata, plexMediaInfo: saved).selectAudioTrack(savedAudio, null)?.track.id,
+      'source:1',
+    );
+
+    final unsaved = source(englishSaved: false);
+    final unsavedAudio = PlaybackSubtitleResolver.audioTracksForSource(unsaved);
+    expect(androidServerAudioSelectionIsSaved(unsaved), isFalse);
+    expect(androidDefaultAudioStreamId(unsaved), 2);
+    expect(
+      TrackSelectionService(metadata: metadata, plexMediaInfo: unsaved).selectAudioTrack(unsavedAudio, null)?.track.id,
+      'source:2',
+    );
+    expect(
+      TrackSelectionService(
+        metadata: metadata,
+        plexMediaInfo: unsaved,
+        audioStreamRequested: true,
+      ).selectAudioTrack(unsavedAudio, null)?.track.id,
+      'source:1',
+    );
+  });
+
+  test('Android subtitle default waits for a dialogue file that loads late', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    resetSharedPreferencesForTest();
+    final settings = await SettingsService.getInstance();
+    await settings.write(SettingsService.androidSubtitleLanguage, 'en');
+    final signs = MediaSubtitleTrack(
+      id: 3,
+      languageCode: 'eng',
+      title: 'Signs & Songs',
+      selected: false,
+      forced: false,
+    );
+    final full = MediaSubtitleTrack(
+      id: 4,
+      languageCode: 'eng',
+      title: 'English Full',
+      selected: false,
+      forced: false,
+      key: '/library/streams/4',
+      external: true,
+    );
+    final source = MediaSourceInfo(
+      videoUrl: '',
+      audioTracks: const [],
+      subtitleTracks: [signs, full],
+      chapters: const [],
+    );
+    final service = TrackSelectionService(
+      metadata: testMediaItem(backend: MediaBackend.jellyfin, kind: MediaKind.episode),
+      plexMediaInfo: source,
+    );
+    final signsOnly = [PlaybackSubtitleResolver.subtitleTrackForSource(signs)];
+    final both = [...signsOnly, PlaybackSubtitleResolver.subtitleTrackForSource(full)];
+
+    expect(service.selectSubtitleTrack(signsOnly, null, null), isNull);
+    expect(service.selectSubtitleTrack(signsOnly, null, null, waitForPendingSource: false)?.track, SubtitleTrack.off);
+    expect(service.selectSubtitleTrack(both, null, null)?.track.id, both.last.id);
+
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    expect(service.selectSubtitleTrack(signsOnly, null, null), isNotNull);
   });
 }

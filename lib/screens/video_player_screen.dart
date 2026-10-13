@@ -831,6 +831,7 @@ class VideoPlayerScreenState extends State<VideoPlayerScreen>
         (OverlaySheetController.maybeOf(_sheetContext)?.isOpen ?? false) ||
         _episode.showPlayNextDialog ||
         _showStillWatchingPrompt ||
+        _playbackFailureMessage != null ||
         PipService().isPipActive.value ||
         _androidAutoPipTransitionInFlight ||
         !_firstFrame.uiReady.value) {
@@ -849,7 +850,50 @@ class VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
+  Rect? _sentAndroidMiniRect;
+
+  /// The native video lives beneath Flutter at full size; shrink it into the
+  /// mini thumbnail so the hole shows the whole picture, not one corner.
+  void _reportAndroidMiniRect(BuildContext context) {
+    final box = context.findRenderObject() as RenderBox?;
+    final current = player;
+    if (!mounted || !_isAndroidMini || current is! PlayerBase || box == null || !box.attached || !box.hasSize) return;
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final origin = box.localToGlobal(Offset.zero);
+    final rect = Rect.fromLTRB(
+      (origin.dx * dpr).floorToDouble(),
+      (origin.dy * dpr).floorToDouble(),
+      ((origin.dx + box.size.width) * dpr).ceilToDouble(),
+      ((origin.dy + box.size.height) * dpr).ceilToDouble(),
+    );
+    if (rect == _sentAndroidMiniRect) return;
+    _sentAndroidMiniRect = rect;
+    unawaited(
+      current
+          .setAndroidContainerRect(
+            left: rect.left.toInt(),
+            top: rect.top.toInt(),
+            right: rect.right.toInt(),
+            bottom: rect.bottom.toInt(),
+          )
+          .catchError((Object e) => appLogger.d('Could not place Android mini video', error: e)),
+    );
+  }
+
+  void _clearAndroidMiniRect() {
+    if (_sentAndroidMiniRect == null) return;
+    _sentAndroidMiniRect = null;
+    final current = player;
+    if (current is! PlayerBase) return;
+    unawaited(
+      current.clearAndroidContainerRect().catchError(
+        (Object e) => appLogger.d('Could not restore Android video size', error: e),
+      ),
+    );
+  }
+
   void _restoreAndroidFullscreen() {
+    _clearAndroidMiniRect();
     _systemUiRestoreOperation = null;
     _restorePipFiltersAfterExit();
     if (SettingsService.instance.read(SettingsService.rotationLocked)) {
@@ -3041,10 +3085,13 @@ class VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   @override
   Widget build(BuildContext context) {
-    if (_isAndroidMini && (_episode.showPlayNextDialog || _showStillWatchingPrompt)) {
+    // Prompts and playback failures need the full-screen view to be seen.
+    bool needsFullscreen() =>
+        _episode.showPlayNextDialog || _showStillWatchingPrompt || _playbackFailureMessage != null;
+    if (_isAndroidMini && needsFullscreen()) {
       final session = _androidSession!;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && session.isMini && (_episode.showPlayNextDialog || _showStillWatchingPrompt)) session.restore();
+        if (mounted && session.isMini && needsFullscreen()) session.restore();
       });
     }
     if (_isAndroidMini && player != null) {
@@ -3055,7 +3102,14 @@ class VideoPlayerScreenState extends State<VideoPlayerScreen>
           video: LayoutBuilder(
             builder: (context, constraints) {
               _scheduleVideoLayoutUpdate(Size(constraints.maxWidth, constraints.maxHeight));
-              return Video(player: player!, hasFirstFrame: _firstFrame.uiReady);
+              return Builder(
+                builder: (context) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (context.mounted) _reportAndroidMiniRect(context);
+                  });
+                  return Video(player: player!, hasFirstFrame: _firstFrame.uiReady);
+                },
+              );
             },
           ),
           title: _currentMetadata.title ?? '',

@@ -732,6 +732,7 @@ extension _VideoPlayerOpenMethods on VideoPlayerScreenState {
       preferredSecondarySubtitleTrack: preferredSecondarySubtitleTrack,
       primarySubtitleIsServerRendered: primarySubtitleIsServerRendered,
       persistAutomaticSubtitleSelection: persistAutomaticSubtitleSelection,
+      audioStreamRequested: _currentOpenRequest?.audioStreamId != null,
       showMessage: (message, {duration}) {
         if (mounted) showAppSnackBar(context, message, duration: duration);
       },

@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../navigation/android_video_session.dart';
 import '../media/ids.dart';
 import '../media/media_backend.dart';
 
@@ -65,6 +66,11 @@ Future<void> navigateToLiveTv(
     normalizedChannels.insert(0, channel);
     currentChannelIndex = 0;
     appLogger.w('Live TV launch channel was not present in navigation list; prepending ${channel.key}');
+  }
+
+  if (hasMinimizedAndroidVideo(context)) {
+    if (!await stopMinimizedAndroidVideo()) return;
+    if (!context.mounted || !(isLaunchCurrent?.call() ?? true) || !(launchObserver?.isCurrent ?? true)) return;
   }
 
   final route = VideoPlayerRoute(

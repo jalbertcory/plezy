@@ -72,8 +72,17 @@ class AndroidTrackPreferences {
       (track.isDefault ? 1 : 0);
 }
 
+/// A server selection that moved off the file's declared default stream is a
+/// saved choice (a per-item pick or account language), which outranks the
+/// Android default. Subtitle rows carry no default flag, so this is audio-only.
+bool androidServerAudioSelectionIsSaved(MediaSourceInfo? source) {
+  final tracks = source?.audioTracks ?? const <MediaAudioTrack>[];
+  final selected = tracks.where((track) => track.selected).firstOrNull;
+  return selected != null && !selected.isDefault && tracks.any((track) => track.isDefault);
+}
+
 int? androidDefaultAudioStreamId(MediaSourceInfo? source) {
-  if (source == null) return null;
+  if (source == null || androidServerAudioSelectionIsSaved(source)) return null;
   final selected = AndroidTrackPreferences.current?.selectAudio(PlaybackSubtitleResolver.audioTracksForSource(source));
   return selected == null ? null : int.tryParse(selected.id.replaceFirst('source:', ''));
 }

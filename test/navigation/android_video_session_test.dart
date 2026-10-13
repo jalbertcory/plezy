@@ -49,8 +49,10 @@ void main() {
     unawaited(result.then((_) => finished = true));
     await tester.pumpAndSettle();
     expect(starts, 1);
+    expect(hasMinimizedAndroidVideo(browseContext), isFalse);
     await tester.tap(find.text('Minimize'));
     await tester.pumpAndSettle();
+    expect(hasMinimizedAndroidVideo(browseContext), isTrue);
     expect(find.text('Episodes'), findsOneWidget);
     expect(find.byType(AndroidVideoMiniPlayer), findsOneWidget);
     expect(starts, 1);
@@ -81,6 +83,7 @@ void main() {
     await tester.drag(find.byType(AndroidVideoMiniPlayer), const Offset(0, -80));
     await tester.pumpAndSettle();
     expect(find.text('Minimize'), findsOneWidget);
+    expect(hasMinimizedAndroidVideo(browseContext), isFalse);
     expect(starts, 1);
     expect(disposals, 0);
     expect(finished, isFalse);
@@ -89,6 +92,26 @@ void main() {
     expect(await result, isTrue);
     expect(disposals, 1);
     expect(find.text('Another show'), findsOneWidget);
+  });
+
+  testWidgets('other platforms never see a minimized Android video host', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    late BuildContext context;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AndroidVideoPlayerHost(
+          child: Builder(
+            builder: (inner) {
+              context = inner;
+              return const SizedBox();
+            },
+          ),
+        ),
+      ),
+    );
+    expect(androidVideoHostOf(context), isNull);
+    expect(hasMinimizedAndroidVideo(context), isFalse);
+    debugDefaultTargetPlatformOverride = null;
   });
 
   testWidgets('closing a mini player completes and disposes exactly once', (tester) async {

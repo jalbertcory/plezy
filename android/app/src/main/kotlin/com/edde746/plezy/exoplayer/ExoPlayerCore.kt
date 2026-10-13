@@ -4098,6 +4098,14 @@ class ExoPlayerCore(private val activity: Activity) :
     }
   }
 
+  override fun setContainerRect(rect: android.graphics.Rect?) {
+    if (disposing) return
+    activity.runOnUiThread {
+      if (disposing) return@runOnUiThread
+      surfaceContainer?.let { PlayerSurfaceHost.setContainerRect(it, rect) }
+    }
+  }
+
   override fun updateFrame() {
     if (disposing) return
     activity.runOnUiThread {

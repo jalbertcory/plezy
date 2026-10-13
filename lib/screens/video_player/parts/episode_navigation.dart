@@ -112,6 +112,17 @@ extension _VideoPlayerEpisodeNavigationMethods on VideoPlayerScreenState {
   /// The route commit owns player-to-player teardown semantics.
   Future<void> _replaceScreenWithPlayer(MediaItem metadata, {WatchPlaybackLease? watchTogetherLease}) async {
     watchTogetherLease ??= _activeWatchTogetherSession()?.capturePlaybackLease(selection: true);
+    // A minimized screen sits above the profile navigator, so a replacement
+    // from there would hit the root route. Return to the player route first.
+    final miniSession = _isAndroidMini ? _androidSession : null;
+    if (miniSession != null) {
+      miniSession.restore();
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted || _isAndroidMini) {
+        if (mounted) _clearEpisodeLoadingFlags();
+        return;
+      }
+    }
     try {
       await navigateToVideoPlayer(
         context,

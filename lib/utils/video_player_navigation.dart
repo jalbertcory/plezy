@@ -313,6 +313,7 @@ Future<bool?> navigateToVideoPlayer(
   bool launchCurrent() =>
       (isLaunchCurrent?.call() ?? true) && (launchObserver?.isCurrent ?? true) && (playbackLease?.isCurrent ?? true);
   if (!launchCurrent()) return null;
+  final androidHost = androidVideoHostOf(context);
   final miniHost = playbackLease == null && AndroidVideoPlayerHost.enabled(context)
       ? AndroidVideoPlayerHost.maybeOf(context)
       : null;
@@ -461,8 +462,11 @@ Future<bool?> navigateToVideoPlayer(
       appLogger.w('External player launch failed, falling back to built-in player', error: e);
     }
 
-    // Prevent stacking an identical video player when already active.
-    if (!usePushReplacement && VideoPlayerScreenState.isNavigationActive(launchIdentity)) {
+    // Prevent stacking an identical video player when already active. A
+    // minimized copy is replaced instead: these options skipped its restore.
+    if (!usePushReplacement &&
+        androidHost?.hasMinimizedVideo != true &&
+        VideoPlayerScreenState.isNavigationActive(launchIdentity)) {
       appLogger.d(
         'Video player already active for ${metadata.globalKey} (mediaIndex=$mediaIndex), skipping duplicate navigation',
       );
@@ -500,10 +504,11 @@ Future<bool?> navigateToVideoPlayer(
       isLaunchCurrent: isLaunchCurrent,
       launchObserver: launchObserver,
     );
-    // Stop a previous minimized session before publishing a new keyed screen.
+    // Stop a previous minimized session before publishing a new keyed screen,
+    // including Watch Together launches, which never minimize themselves.
     // The coordinator waits for its native disposal before another open.
-    if (miniHost?.session?.isMini == true) {
-      if (!await PlaybackCoordinator.instance.stopVideoAndExit()) return null;
+    if (androidHost?.hasMinimizedVideo == true) {
+      if (!await stopMinimizedAndroidVideo()) return null;
       if (!context.mounted || !launchCurrent()) return null;
     }
     final session = miniHost?.createSession(navigator, playerBuilder, playbackLease);

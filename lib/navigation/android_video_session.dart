@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 
+import '../services/playback_coordinator.dart';
 import '../utils/platform_detector.dart';
 import '../utils/video_player_navigation.dart';
 import '../watch_together/services/watch_together_controller.dart';
@@ -89,6 +90,20 @@ class AndroidVideoSession extends ChangeNotifier {
   }
 }
 
+/// Any new playback (VOD, Live TV, Watch Together) owns the native channel, so
+/// a minimized video must be stopped first; see [stopMinimizedAndroidVideo].
+bool hasMinimizedAndroidVideo(BuildContext context) =>
+    context.mounted && (androidVideoHostOf(context)?.hasMinimizedVideo ?? false);
+
+/// The handheld Android video host above [context], or null elsewhere. Reads
+/// without a dependency, so launch code can capture it before async gaps.
+AndroidVideoPlayerHostState? androidVideoHostOf(BuildContext context) => AndroidVideoPlayerHost.enabled(context)
+    ? context.getInheritedWidgetOfExactType<_AndroidVideoHostScope>()?.host
+    : null;
+
+/// False keeps the minimized video (its owner declined to leave).
+Future<bool> stopMinimizedAndroidVideo() => PlaybackCoordinator.instance.stopVideoAndExit();
+
 class AndroidVideoSessionScope extends InheritedNotifier<AndroidVideoSession> {
   const AndroidVideoSessionScope({super.key, required AndroidVideoSession session, required super.child})
     : super(notifier: session);
@@ -121,6 +136,11 @@ class AndroidVideoPlayerHost extends StatefulWidget {
 
 class AndroidVideoPlayerHostState extends State<AndroidVideoPlayerHost> {
   AndroidVideoSession? session;
+
+  bool get hasMinimizedVideo {
+    final current = session;
+    return mounted && current != null && current.isMini && !current.isClosed;
+  }
 
   AndroidVideoSession createSession(NavigatorState navigator, WidgetBuilder builder, WatchPlaybackLease? lease) {
     final next = AndroidVideoSession(this, navigator, builder, lease);

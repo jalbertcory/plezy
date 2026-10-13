@@ -707,7 +707,18 @@ class TrackSelectionService {
   final MediaItem metadata;
   final MediaSourceInfo? plexMediaInfo;
 
-  TrackSelectionService({this.player, this.profileSettings, required this.metadata, this.plexMediaInfo});
+  /// The open asked the server for a specific audio stream (a launch pick,
+  /// version switch, or retry). That explicit choice outranks Android
+  /// language defaults.
+  final bool audioStreamRequested;
+
+  TrackSelectionService({
+    this.player,
+    this.profileSettings,
+    required this.metadata,
+    this.plexMediaInfo,
+    this.audioStreamRequested = false,
+  });
 
   /// The profile's preferred language for one track kind, or null when unset.
   static String? _preferredLanguage(MediaServerUserProfile profile, {required bool isAudio}) {
@@ -863,6 +874,15 @@ class TrackSelectionService {
     return sourceId == null ? null : plexMediaInfo?.subtitleTracks.where((track) => track.id == sourceId).firstOrNull;
   }
 
+  /// The source row the Android subtitle default picks from this item's
+  /// catalog, or null when the default is unset, off, or the catalog is empty.
+  MediaSubtitleTrack? _androidDefaultSourceSubtitle() {
+    return switch (androidDefaultSubtitlePreference(plexMediaInfo)) {
+      SubtitleTrackPreference(:final track) => _sourceSubtitleTrack(track.id),
+      _ => null,
+    };
+  }
+
   /// Whether the source catalog can prove it has already delivered every
   /// ordinary direct-embedded row, so a still-unmatched [sourceTrack] is a
   /// real mismatch rather than a native track that has not arrived yet.
@@ -989,7 +1009,11 @@ class TrackSelectionService {
       appLogger.d('Audio carry declined: ${preferredAudioTrack.language}/${preferredAudioTrack.title}');
     }
 
-    final localAudio = (metadata.isVideoContent ? AndroidTrackPreferences.current : null)?.selectAudio(availableTracks);
+    final localAudio =
+        (metadata.isVideoContent && !audioStreamRequested && !androidServerAudioSelectionIsSaved(plexMediaInfo)
+                ? AndroidTrackPreferences.current
+                : null)
+            ?.selectAudio(availableTracks);
     if (localAudio != null) return TrackSelectionResult(localAudio, TrackSelectionPriority.profile);
 
     // Priority 2: Check server-selected track from media info
@@ -1113,10 +1137,23 @@ class TrackSelectionService {
         appLogger.d('Subtitle intent declined: $intent');
     }
 
-    final localSubtitle = (metadata.isVideoContent ? AndroidTrackPreferences.current : null)?.selectSubtitle(
-      availableTracks,
-    );
-    if (localSubtitle != null) return TrackSelectionResult(localSubtitle, TrackSelectionPriority.profile);
+    final androidPreferences = metadata.isVideoContent ? AndroidTrackPreferences.current : null;
+    if (androidPreferences != null) {
+      // Judge the default against the full source catalog first: a dialogue
+      // file that loads late must not lose to an early signs-only track.
+      final sourceRow = _androidDefaultSourceSubtitle();
+      if (sourceRow != null) {
+        final native = findMpvTrackForPlexSubtitle(
+          sourceRow,
+          availableTracks,
+          allPlexTracks: plexMediaInfo?.subtitleTracks,
+        );
+        if (native != null) return TrackSelectionResult(native, TrackSelectionPriority.profile);
+        if (waitForPendingSource && !_hasCompleteDirectSourceCatalogFor(sourceRow, availableTracks)) return null;
+      }
+      final localSubtitle = androidPreferences.selectSubtitle(availableTracks);
+      if (localSubtitle != null) return TrackSelectionResult(localSubtitle, TrackSelectionPriority.profile);
+    }
 
     // Priority 2: Trust the server's selected track. Plex computes this from
     // account/show/per-item prefs; MediaBrowser exposes DefaultSubtitleStreamIndex.

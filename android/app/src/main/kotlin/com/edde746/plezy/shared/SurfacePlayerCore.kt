@@ -12,6 +12,9 @@ package com.edde746.plezy.shared
 interface SurfacePlayerCore {
   fun setVisible(visible: Boolean)
   fun updateFrame()
+
+  /** Android mini player: place the player container at [rect] (content-view px); null restores full size. */
+  fun setContainerRect(rect: android.graphics.Rect?)
   fun onPipModeChanged(isInPipMode: Boolean)
   fun requestAudioFocus(): Boolean
   fun abandonAudioFocus()
