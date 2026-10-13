@@ -12,6 +12,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  android_credential_store:
+    path: packages/android_credential_store
   clock: ^1.1.2
   intl: ^0.20.2
   json_annotation: ^4.12.0
@@ -68,10 +70,10 @@ dependencies:
   # partials through the provider; ebdf69a resumes a download the system stops
   # (job quota, lost network) instead of reporting it canceled and deleting the
   # partial. Keep the same-filesystem move/resume cleanup; no per-host TLS bypass.
+  # Vendored at ebdf69a with the Android credential patches listed in
+  # packages/background_downloader/PLEZY_PATCHES.md.
   background_downloader:
-    git:
-      url: https://github.com/edde746/background_downloader
-      ref: ebdf69a7bdd03d410bfdfc700add08eed0de161d
+    path: packages/background_downloader
   sentry_flutter: ^9.30.0
   auto_updater:
     git:

@@ -1,3 +1,5 @@
+import '../services/android_credentials/android_credential_store.dart';
+import '../services/android_credentials/android_credential_bindings.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -74,10 +76,37 @@ class ConnectionRegistry {
         }
       }
       final createdAt = existing?.createdAt ?? connection.createdAt.millisecondsSinceEpoch;
-      final protectedConfig = await CredentialVault.protectConnectionConfig(
-        connection.kind.id,
-        connection.toConfigJson(),
-      );
+      final protectedConfig = AndroidCredentialStore.enabled
+          ? (await AndroidCredentialBindings.connection(
+              connection.kind.id,
+              connection.id,
+              connection.displayName,
+              Map<String, dynamic>.from(connection.toConfigJson()),
+              freshSignIn: true,
+            )).stored
+          : await CredentialVault.protectConnectionConfig(connection.kind.id, connection.toConfigJson());
+      if (AndroidCredentialStore.enabled && existing != null) {
+        AndroidCredentialBindings.preserveResetSources(
+          existing.kind,
+          existing.id,
+          jsonDecode(existing.configJson) as Map<String, dynamic>,
+          protectedConfig,
+        );
+        final retained = AndroidCredentialBindings.connectionOwners(
+          connection.kind.id,
+          connection.id,
+          connection.displayName,
+          Map<String, dynamic>.from(connection.toConfigJson()),
+        ).map((o) => o.id).toSet();
+        for (final owner in AndroidCredentialBindings.connectionOwners(
+          existing.kind,
+          existing.id,
+          existing.displayName,
+          jsonDecode(existing.configJson) as Map<String, dynamic>,
+        )) {
+          if (!retained.contains(owner.id)) await AndroidCredentialStore.remove(owner);
+        }
+      }
       final row = ConnectionsCompanion(
         id: Value(connection.id),
         kind: Value(connection.kind.id),
@@ -112,6 +141,18 @@ class ConnectionRegistry {
 
   Future<void> remove(String id) async {
     await _db.runIdentityMutation(() async {
+      if (AndroidCredentialStore.enabled) {
+        final row = await (_db.select(_db.connections)..where((t) => t.id.equals(id))).getSingleOrNull();
+        if (row != null) {
+          await AndroidCredentialBindings.removeConnection(
+            row.kind,
+            row.id,
+            row.displayName,
+            jsonDecode(row.configJson) as Map<String, dynamic>,
+          );
+        }
+        await AndroidCredentialBindings.removeProfileItems(_db, connectionId: id);
+      }
       await (_db.delete(_db.connections)..where((t) => t.id.equals(id))).go();
     });
     appLogger.d('ConnectionRegistry: removed $id');
@@ -119,6 +160,17 @@ class ConnectionRegistry {
 
   Future<void> clear() async {
     await _db.runIdentityMutation(() async {
+      if (AndroidCredentialStore.enabled) {
+        for (final row in await _db.select(_db.connections).get()) {
+          await AndroidCredentialBindings.removeConnection(
+            row.kind,
+            row.id,
+            row.displayName,
+            jsonDecode(row.configJson) as Map<String, dynamic>,
+          );
+        }
+        await AndroidCredentialBindings.removeProfileItems(_db);
+      }
       await _db.delete(_db.connections).go();
     });
   }
@@ -139,10 +191,29 @@ class ConnectionRegistry {
   }
 
   Future<Connection?> _rowToConnection(ConnectionRow row) async {
+    if (!AndroidCredentialStore.enabled) return _decodeRow(row);
+    return _db.runIdentityMutation(() async {
+      final current = await (_db.select(_db.connections)..where((t) => t.id.equals(row.id))).getSingleOrNull();
+      return current == null ? null : _decodeRow(current);
+    });
+  }
+
+  Future<Connection?> _decodeRow(ConnectionRow row) async {
     try {
       final json = jsonDecode(row.configJson) as Map<String, dynamic>;
       final kind = MediaBackend.fromId(row.kind);
-      final revealed = await CredentialVault.revealConnectionConfig(kind.id, json);
+      final android = AndroidCredentialStore.enabled
+          ? await AndroidCredentialBindings.connection(kind.id, row.id, row.displayName, json)
+          : null;
+      if (android?.changed == true) {
+        await _db.runIdentityMutation(() async {
+          await (_db.update(_db.connections)..where((t) => t.id.equals(row.id) & t.configJson.equals(row.configJson)))
+              .write(ConnectionsCompanion(configJson: Value(jsonEncode(android!.stored))));
+        });
+      }
+      final revealed = android == null
+          ? await CredentialVault.revealConnectionConfig(kind.id, json)
+          : (config: android.clear, migrated: false);
       final createdAt = DateTime.fromMillisecondsSinceEpoch(row.createdAt);
       final lastAuth = row.lastAuthenticatedAt == null
           ? null
@@ -167,6 +238,8 @@ class ConnectionRegistry {
         await upsert(connection);
       }
       return connection;
+    } on AndroidCredentialFailure {
+      rethrow;
     } catch (e, st) {
       appLogger.e('ConnectionRegistry: failed to decode connection ${row.id}', error: e, stackTrace: st);
       return null;

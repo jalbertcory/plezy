@@ -35,6 +35,6 @@ Preserve uncommitted work before changing scope. Use a separate checkout, branch
 
 ## Current task constraints
 
-SDK installation is awaiting approval. Do not install Flutter, Dart, CocoaPods, or large platform toolchains until that approval arrives. Use fabricated credentials and mocked stores for credential tests. Do not inspect real credential values, launch the app against real credential stores, or configure credentials for validation.
+Cory approved installing Flutter/Dart and required Android build tools on 2026-10-03. Reuse suitable installations and prefer explicit local tool paths. CocoaPods and non-Android setup remain outside scope. Obtain explicit approval before accepting a new SDK license agreement or an unexpected permission/security change. Use fabricated credentials and mocked stores for host tests. Cory also authorized actual Keystore validation using only fabricated accounts in the fresh Plezy_Disposable_API36_Arm64 emulator; never use the existing personal AVD or a personal device. Do not inspect real credential values or use personal credential stores. Native validation is limited to fabricated values in the authorized disposable emulator.
 
 No push, pull request, release, or platform expansion is authorized by this file. Follow the user's current instructions for those actions.

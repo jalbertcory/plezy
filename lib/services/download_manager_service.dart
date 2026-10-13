@@ -1,3 +1,5 @@
+import 'android_credentials/android_credential_store.dart';
+import 'android_credentials/android_download_credentials.dart';
 // ignore_for_file: prefer_initializing_formals
 
 import 'dart:async';
@@ -212,6 +214,11 @@ class DownloadManagerService {
 
   // Prevents concurrent _processQueue calls
   bool _isProcessingQueue = false;
+  bool _androidCredentialsClosing = false;
+  int _androidCredentialEpoch = 0;
+  final _androidCredentialHandoff = SerialFutureQueue();
+  Future<T> _withAndroidCredentialHandoff<T>(Future<T> Function() action) =>
+      AndroidCredentialStore.enabled ? _androidCredentialHandoff.run(action) : action();
   // A _processQueue call landed while a drain was already running; the
   // running drain replays one more full pass before releasing the guard.
   bool _queueRerunRequested = false;
@@ -916,9 +923,56 @@ class DownloadManagerService {
   }
 
   /// Initialize background_downloader with callbacks, notifications, and concurrency config.
+  void enableAndroidDownloadsForProfile() {
+    _androidCredentialsClosing = false;
+  }
+
+  Future<void> stopAndroidDownloadsForLogout() async {
+    if (!AndroidCredentialStore.enabled || !downloadsSupported) return;
+    _androidCredentialsClosing = true;
+    _androidCredentialEpoch++;
+    await _withAndroidCredentialHandoff(() async {
+      final tasks = <String, Task>{
+        for (final record in await _nativeOps.allRecords()) record.taskId: record.task,
+        for (final task in await _nativeOps.allTasks()) task.taskId: task,
+      };
+      if (tasks.isNotEmpty && !await _nativeOps.cancelTaskIds(tasks.keys)) {
+        throw StateError('Could not stop Android downloads for logout');
+      }
+      for (final task in tasks.values) {
+        await removeAndroidDownloadCredential(task);
+        await _nativeOps.deleteRecord(task.taskId);
+      }
+    });
+  }
+
+  Future<void> _retireLegacyAndroidDownloads() async {
+    final tasks = <String, Task>{
+      for (final record in await _nativeOps.allRecords()) record.taskId: record.task,
+      for (final task in await _nativeOps.allTasks()) task.taskId: task,
+    };
+    final legacy = tasks.values.where((task) => !isAndroidDownloadReference(task)).toList();
+    if (legacy.isEmpty) return;
+    if (!await _nativeOps.cancelTaskIds(legacy.map((task) => task.taskId))) {
+      throw StateError('Could not retire legacy Android download requests');
+    }
+    for (final task in legacy) {
+      await _nativeOps.deleteRecord(task.taskId);
+      if (task.metaData.isEmpty) continue;
+      final row = await _database.getDownloadedMedia(task.metaData);
+      if (row?.status == DownloadStatus.paused.index) {
+        await _database.updateBgTaskId(task.metaData, null);
+        await _database.removeFromQueue(task.metaData);
+      } else {
+        await _requeueRelocatedDownload(task.metaData, row: row);
+      }
+    }
+  }
+
   Future<void> _initializeFileDownloader() async {
     if (_fileDownloaderInitialized) return;
     if (_skipDownloadsUnsupported('FileDownloader initialization')) return;
+    if (AndroidCredentialStore.enabled) await _retireLegacyAndroidDownloads();
 
     FileDownloader()
         .registerCallbacks(
@@ -1864,7 +1918,11 @@ class DownloadManagerService {
   /// Process the download queue — prepares and enqueues items with background_downloader.
   /// Non-blocking: returns after all queued items are enqueued (downloads run natively).
   Future<void> _processQueue(MediaServerClient client) async {
-    if (_skipDownloadsUnsupported('download queue processing') || _queueBlockedByStorageFailure) return;
+    if (_androidCredentialsClosing ||
+        _skipDownloadsUnsupported('download queue processing') ||
+        _queueBlockedByStorageFailure) {
+      return;
+    }
     final queueProcessorOverride = _queueProcessorOverride;
     if (queueProcessorOverride != null) {
       _fallbackClient = client;
@@ -1889,7 +1947,7 @@ class DownloadManagerService {
         // Heads whose client could not be resolved this cycle: excluded from the
         // next lookup so the drain advances instead of re-reading the same row.
         final skippedGlobalKeys = <String>{};
-        while (!_queueBlockedByStorageFailure) {
+        while (!_androidCredentialsClosing && !_queueBlockedByStorageFailure) {
           if (_consecutiveQueueFailures >= _maxConsecutiveFailures) {
             appLogger.w('Circuit breaker: $_consecutiveQueueFailures consecutive failures, pausing queue');
             break;
@@ -1914,7 +1972,8 @@ class DownloadManagerService {
         }
         // A fresh pass gets a fresh skip set: a rerun request means server
         // availability may have changed under the pass that just finished.
-      } while (_queueRerunRequested &&
+      } while (!_androidCredentialsClosing &&
+          _queueRerunRequested &&
           !_queueBlockedByStorageFailure &&
           _consecutiveQueueFailures < _maxConsecutiveFailures);
     } finally {
@@ -2034,16 +2093,34 @@ class DownloadManagerService {
   /// Hand a prepared task to the native downloader, recording its id first so a
   /// concurrent cancel can find it. Returns true if the download went inactive
   /// while enqueueing and the task was dropped again.
-  Future<bool> _enqueuePreparedTask(String globalKey, Task task, String kind) async {
-    await _database.updateBgTaskId(globalKey, task.taskId);
-    final success = await (_enqueueTaskOverride ?? FileDownloader().enqueue)(task);
-    if (!success) throw Exception('Failed to enqueue $kind task');
-    if (await _cancelEnqueuedTaskIfInactive(globalKey, task.taskId)) {
-      return true;
-    }
-    appLogger.i('Enqueued $kind task ${task.taskId} for $globalKey');
-    return false;
-  }
+  Future<bool> _enqueuePreparedTask(String globalKey, Task task, String kind, int credentialEpoch) =>
+      _withAndroidCredentialHandoff(() async {
+        if (AndroidCredentialStore.enabled &&
+            (_androidCredentialsClosing || credentialEpoch != _androidCredentialEpoch)) {
+          return true;
+        }
+        if (AndroidCredentialStore.enabled) {
+          if (_disposed) return true;
+          task = await protectAndroidDownload(task);
+          if (_disposed) {
+            await removeAndroidDownloadCredential(task);
+            return true;
+          }
+        }
+        await _database.updateBgTaskId(globalKey, task.taskId);
+        final success = await (_enqueueTaskOverride ?? FileDownloader().enqueue)(task);
+        if (AndroidCredentialStore.enabled && _disposed) {
+          if (!await FileDownloader().cancel(task)) throw StateError('Could not stop disposed download');
+          await removeAndroidDownloadCredential(task);
+          return true;
+        }
+        if (!success) throw Exception('Failed to enqueue $kind task');
+        if (await _cancelEnqueuedTaskIfInactive(globalKey, task.taskId)) {
+          return true;
+        }
+        appLogger.i('Enqueued $kind task ${task.taskId} for $globalKey');
+        return false;
+      });
 
   /// Resolve metadata, video URL, and file path, then enqueue a background download task.
   /// Returns true if successfully enqueued, false if it failed immediately.
@@ -2052,7 +2129,8 @@ class DownloadManagerService {
     MediaServerClient client,
     DownloadQueueItem queueItem,
   ) async {
-    if (_skipDownloadsUnsupported('download enqueue')) return false;
+    final credentialEpoch = _androidCredentialEpoch;
+    if (_androidCredentialsClosing || _skipDownloadsUnsupported('download enqueue')) return false;
     if (_cancellingKeys.contains(globalKey)) return true;
     if (_queueBlockedByStorageFailure) return true;
 
@@ -2142,6 +2220,7 @@ class DownloadManagerService {
         resolution: resolution,
         partIndex: partIndex,
         showYear: showYear,
+        credentialEpoch: credentialEpoch,
       );
       return true;
     } catch (e, st) {
@@ -2244,7 +2323,9 @@ class DownloadManagerService {
     required DownloadResolution resolution,
     required int partIndex,
     required int? showYear,
+    int? credentialEpoch,
   }) async {
+    final epoch = credentialEpoch ?? _androidCredentialEpoch;
     final serverId = parseGlobalKey(globalKey)?.serverId;
     if (serverId == null) throw Exception('Invalid globalKey: $globalKey');
     final firstExt = downloadExtensionFromUrl(resolution.videoUrl!) ?? 'mp4';
@@ -2365,7 +2446,7 @@ class DownloadManagerService {
         safRootUri: safRootUri,
       );
 
-      return _enqueuePreparedTask(globalKey, task, safRootUri != null ? 'SAF download' : 'download');
+      return _enqueuePreparedTask(globalKey, task, safRootUri != null ? 'SAF download' : 'download', epoch);
     });
   }
 
@@ -2375,7 +2456,7 @@ class DownloadManagerService {
   /// or after the download location changed, the row goes back to the queue,
   /// whose next pass re-resolves the item and resumes — or restarts — it.
   Future<void> _continueStackedDownload(String globalKey, int partIndex, _DownloadContext? ctx) async {
-    if (_disposed) return;
+    if (_disposed || _androidCredentialsClosing) return;
     try {
       final row = await _database.getDownloadedMedia(globalKey);
       if (row == null ||
@@ -2545,6 +2626,10 @@ class DownloadManagerService {
 
   Future<void> _handleTaskStatusChanged(TaskStatusUpdate update) async {
     if (_disposed) return;
+    if (AndroidCredentialStore.enabled &&
+        [TaskStatus.complete, TaskStatus.canceled, TaskStatus.notFound].contains(update.status)) {
+      await removeAndroidDownloadCredential(update.task);
+    }
     final globalKey = update.task.metaData;
     if (globalKey.isEmpty) return;
 
@@ -2957,7 +3042,9 @@ class DownloadManagerService {
             if (metadata == null) {
               throw Exception('No metadata for SAF recovery of $globalKey');
             }
-            final ext = downloadExtensionFromUrl(task.url) ?? 'mp4';
+            final ext = AndroidCredentialStore.enabled && isAndroidDownloadReference(task)
+                ? (path.extension(task.filename).isEmpty ? 'mp4' : path.extension(task.filename).substring(1))
+                : downloadExtensionFromUrl(task.url) ?? 'mp4';
             storedPath =
                 await _resolveSafStoredPathForRecovery(
                   metadata,
@@ -3497,6 +3584,7 @@ class DownloadManagerService {
     _NativeTaskForId? taskForId,
     _NativeResumeTask? resumeTask,
   }) async {
+    final credentialEpoch = _androidCredentialEpoch;
     await _cancelNativeTasksForGlobalKey(globalKey, exceptTaskId: bgTaskId, reason: 'duplicate task before resume');
 
     var markedDownloading = false;
@@ -3511,7 +3599,14 @@ class DownloadManagerService {
       // so the download would restart from 0%.
       await _transitionStatus(globalKey, DownloadStatus.downloading);
       markedDownloading = true;
-      if (await (resumeTask ?? FileDownloader().resume)(task)) {
+      final resumed = await _withAndroidCredentialHandoff(() async {
+        if (AndroidCredentialStore.enabled &&
+            (_disposed || _androidCredentialsClosing || credentialEpoch != _androidCredentialEpoch)) {
+          return false;
+        }
+        return (resumeTask ?? FileDownloader().resume)(task);
+      });
+      if (resumed) {
         appLogger.i('Resumed download via background_downloader for $globalKey');
         return true;
       }

@@ -1,0 +1,30 @@
+plugins {
+    id 'com.android.library'
+}
+
+def agpMajor = com.android.Version.ANDROID_GRADLE_PLUGIN_VERSION.tokenize('.')[0] as int
+def isBuiltInKotlinFalse = project.hasProperty('builtInKotlin') &&
+        (project.property('builtInKotlin') == false || project.property('builtInKotlin') == 'false')
+if (agpMajor < 9 || isBuiltInKotlinFalse) {
+    apply plugin: ['kotlin', 'android'].join('-')
+}
+
+group 'com.plezy.credentials'
+version '1.0'
+
+android {
+    namespace 'com.plezy.credentials'
+    compileSdk 36
+    defaultConfig { minSdkVersion 23 }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    sourceSets { main.java.srcDirs += 'src/main/kotlin' }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}

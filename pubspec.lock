@@ -33,6 +33,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.14.4"
+  android_credential_store:
+    dependency: "direct main"
+    description:
+      path: "packages/android_credential_store"
+      relative: true
+    source: path
+    version: "0.1.0"
   ansicolor:
     dependency: transitive
     description:
@@ -104,11 +111,9 @@ packages:
   background_downloader:
     dependency: "direct main"
     description:
-      path: "."
-      ref: ebdf69a7bdd03d410bfdfc700add08eed0de161d
-      resolved-ref: ebdf69a7bdd03d410bfdfc700add08eed0de161d
-      url: "https://github.com/edde746/background_downloader"
-    source: git
+      path: "packages/background_downloader"
+      relative: true
+    source: path
     version: "9.6.2"
   boolean_selector:
     dependency: transitive

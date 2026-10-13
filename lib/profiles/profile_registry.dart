@@ -1,3 +1,5 @@
+import '../services/android_credentials/android_credential_store.dart';
+import '../services/android_credentials/android_credential_bindings.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -69,6 +71,7 @@ class ProfileRegistry {
 
   Future<void> remove(String id) async {
     await _db.runIdentityMutation(() async {
+      if (AndroidCredentialStore.enabled) await AndroidCredentialBindings.removeProfileItems(_db, profileId: id);
       await (_db.delete(_db.profiles)..where((t) => t.id.equals(id))).go();
     });
     appLogger.d('ProfileRegistry: removed $id');
@@ -85,6 +88,15 @@ class ProfileRegistry {
   /// One-shot cleanup: drop any `kind='plex_home'` rows left over from the
   /// pre-refactor data model. Plex Home users are no longer persisted.
   Future<int> dropAllPlexHomeRows() async {
+    if (AndroidCredentialStore.enabled) {
+      return _db.runIdentityMutation(() async {
+        final rows = await (_db.select(_db.profiles)..where((t) => t.kind.equals(ProfileKind.plexHome.id))).get();
+        for (final row in rows) {
+          await AndroidCredentialBindings.removeProfileItems(_db, profileId: row.id);
+        }
+        return (_db.delete(_db.profiles)..where((t) => t.kind.equals(ProfileKind.plexHome.id))).go();
+      });
+    }
     return _db.runIdentityMutation(
       () => (_db.delete(_db.profiles)..where((t) => t.kind.equals(ProfileKind.plexHome.id))).go(),
     );
@@ -92,6 +104,7 @@ class ProfileRegistry {
 
   Future<void> clear() async {
     await _db.runIdentityMutation(() async {
+      if (AndroidCredentialStore.enabled) await AndroidCredentialBindings.removeProfileItems(_db);
       await _db.delete(_db.profiles).go();
     });
   }

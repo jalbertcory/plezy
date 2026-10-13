@@ -1,3 +1,4 @@
+import 'android_credentials/android_credential_store.dart';
 import 'dart:convert';
 import 'dart:math';
 
@@ -67,6 +68,9 @@ class CredentialVault {
   /// key generation) or a corrupt payload means the credential is *lost*,
   /// never a reason to crash; callers treat null as "re-acquire the token".
   static Future<String?> reveal(String value) async {
+    if (AndroidCredentialStore.enabled && AndroidCredentialStore.isReference(value)) {
+      return AndroidCredentialStore.revealReference(value);
+    }
     if (!isProtected(value)) return value;
     while (true) {
       final generation = _cacheGeneration;
@@ -83,11 +87,23 @@ class CredentialVault {
         nonce: base64Decode(payload['n'] as String),
         mac: Mac(base64Decode(payload['m'] as String)),
       );
-      final clear = await _algorithm.decrypt(box, secretKey: await _getSecretKey());
+      final SecretKey key;
+      if (AndroidCredentialStore.enabled) {
+        final legacy = readTolerantString(await BaseSharedPreferencesService.sharedCache(), _keyPref);
+        if (legacy == null || legacy.isEmpty) return null;
+        key = SecretKey(base64Decode(legacy));
+      } else {
+        key = await _getSecretKey();
+      }
+      final clear = await _algorithm.decrypt(box, secretKey: key);
       return utf8.decode(clear);
     } catch (e) {
       if (generation != _cacheGeneration) return null;
-      appLogger.w('CredentialVault: failed to decrypt stored credential, treating as lost', error: e);
+      if (AndroidCredentialStore.enabled) {
+        appLogger.w('Legacy Android credential could not be decrypted; preserving source');
+      } else {
+        appLogger.w('CredentialVault: failed to decrypt stored credential, treating as lost', error: e);
+      }
       return null;
     }
   }

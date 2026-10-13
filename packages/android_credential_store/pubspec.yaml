@@ -1,0 +1,16 @@
+name: android_credential_store
+description: Android-only scoped credential storage for the Plezy fork.
+version: 0.1.0
+publish_to: none
+environment:
+  sdk: '>=3.12.0 <4.0.0'
+  flutter: '>=3.47.0'
+dependencies:
+  flutter:
+    sdk: flutter
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.plezy.credentials
+        pluginClass: AndroidCredentialStorePlugin

@@ -1,3 +1,6 @@
+import 'sensitive_prefs.dart';
+import 'android_credentials/android_credential_store.dart';
+import 'android_credentials/android_credential_bindings.dart';
 import 'dart:convert';
 import '../media/ids.dart';
 import '../media/library_filter_selection.dart';
@@ -75,7 +78,14 @@ class StorageService extends BaseSharedPreferencesService {
         case final List<Object?> v:
           await prefs.setStringList(newKey, v.cast<String>());
         case final String v:
-          await prefs.setString(newKey, v);
+          if (AndroidCredentialStore.enabled && profileScopedCredentialBaseKey(key) != null) {
+            final clear = await AndroidCredentialPreferences.load(key);
+            if (clear == null) continue;
+            await AndroidCredentialPreferences.save(newKey, clear);
+            await AndroidCredentialPreferences.clear(key);
+          } else {
+            await prefs.setString(newKey, v);
+          }
         case final bool v:
           await prefs.setBool(newKey, v);
         case final int v:
@@ -590,7 +600,13 @@ class StorageService extends BaseSharedPreferencesService {
 
   Future<void> _clearKeysWithPrefix(String prefix) async {
     final keys = prefs.keys.where((k) => k.startsWith(prefix)).toList(growable: false);
-    await Future.wait(keys.map((k) => prefs.remove(k)));
+    await Future.wait(
+      keys.map(
+        (k) => AndroidCredentialStore.enabled && profileScopedCredentialBaseKey(k) != null
+            ? AndroidCredentialPreferences.clear(k)
+            : prefs.remove(k),
+      ),
+    );
   }
 
   bool _belongsToServer(String value, ServerId serverId) => value.startsWith('$serverId:');
