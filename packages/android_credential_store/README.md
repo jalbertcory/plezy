@@ -10,4 +10,4 @@ The ciphertext file is excluded from backup by the app. Nonsecret reset journals
 
 References: [Android Keystore](https://developer.android.com/privacy-and-security/keystore) and [permanent invalidation exception](https://developer.android.com/reference/android/security/keystore/KeyPermanentlyInvalidatedException).
 
-This implementation is a local draft under the root Plezy license. Host fake-store tests pass. The Android debug build and four disposable-emulator instrumentation cases pass. Only fabricated values were used in the test app sandbox.
+This implementation is a draft for review under the root Plezy license. Host fake-store tests pass. The Android debug build and four disposable-emulator instrumentation cases pass. Only fabricated values were used in the test app sandbox.
