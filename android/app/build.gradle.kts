@@ -294,12 +294,15 @@ android {
 
   buildTypes {
     release {
-      // Only use release signing if key.properties exists (not in CI/CD)
+      // Use release signing when key.properties exists; otherwise fall back to debug
+      // signing so local release APKs stay installable. Without an explicit config the
+      // release APK is unsigned and Android rejects it.
       val keystorePropertiesFile = rootProject.file("key.properties")
-      if (keystorePropertiesFile.exists()) {
-        signingConfig = signingConfigs.getByName("release")
+      signingConfig = if (keystorePropertiesFile.exists()) {
+        signingConfigs.getByName("release")
+      } else {
+        signingConfigs.getByName("debug")
       }
-      // If key.properties doesn't exist, it will use debug signing for CI builds
       ndk {
         debugSymbolLevel = "FULL"
       }
@@ -325,8 +328,8 @@ android {
       isShrinkResources = false
       testProguardFiles("proguard-test-rules.pro")
       proguardFile("proguard-instrumentation-rules.pro")
-      // Release has no signing config unless key.properties exists, which would leave
-      // this variant unsigned and uninstallable in CI.
+      // Release takes the upload key when key.properties exists; this test-only variant
+      // must stay debug-signed regardless.
       signingConfig = signingConfigs.getByName("debug")
       // Plugin subprojects only publish debug and release variants.
       matchingFallbacks += listOf("debug", "release")
