@@ -239,7 +239,7 @@ Validation of the merged tree: `flutter pub get`, then the CI quality steps (for
 
 ## Release build debug-signing fallback — 2026-10-25
 
-Intent: keep local Android release APKs installable. Without `android/key.properties`, the `release` build type had no signing config, despite a comment claiming a debug fallback. `flutter build apk --release` produced an unsigned APK, and Android rejected it with `INSTALL_PARSE_FAILED_NO_CERTIFICATES`. Status: committed locally on `claude/samsung-tablet-build-deploy-e4ceca` as `0d3ba92ddf7f9b562654f4c7cea85fc2b115161a`, based on fork `main` at `cb85fbea768bbc9aa033b3cee6b070e21567ab85`. Not pushed or released.
+Intent: keep local Android release APKs installable. Without `android/key.properties`, the `release` build type had no signing config, despite a comment claiming a debug fallback. `flutter build apk --release` produced an unsigned APK, and Android rejected it with `INSTALL_PARSE_FAILED_NO_CERTIFICATES`. Status: committed locally on `claude/samsung-tablet-build-deploy-e4ceca` as `0d3ba92ddf7f9b562654f4c7cea85fc2b115161a`, based on fork `main` at `cb85fbea768bbc9aa033b3cee6b070e21567ab85`. Pushed for review as [PR #3](https://github.com/jalbertcory/plezy/pull/3) at Cory's request on 2026-10-25; not merged or released.
 
 Baseline: upstream `edde746/plezy` at `8ef7c2cd9` (unchanged; see Baseline and branch scope).
 
