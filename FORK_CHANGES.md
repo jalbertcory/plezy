@@ -236,3 +236,17 @@ Validation in the isolated PR worktree: the CI quality steps passed (format, gen
 Cory asked for both PRs to be reviewed, fixed and merged. PR #2 (credentials) was merged first, then PR #1 (mini player). The only conflict was this file: both records were kept, and the baseline and sync-history sections were updated. No code conflicts.
 
 Validation of the merged tree: `flutter pub get`, then the CI quality steps (format, generated files, translations, icons, analyzer, unused code/files) passed. The full `flutter test` run passed, **7,993 tests** with 6 skipped. The Android arm64 debug APK built. Remote CI, device, emulator, Android TV and Fire TV checks remain pending; Cory will test on a device.
+
+## Release build debug-signing fallback — 2026-10-25
+
+Intent: keep local Android release APKs installable. Without `android/key.properties`, the `release` build type had no signing config, despite a comment claiming a debug fallback. `flutter build apk --release` produced an unsigned APK, and Android rejected it with `INSTALL_PARSE_FAILED_NO_CERTIFICATES`. Status: local, uncommitted change on `claude/samsung-tablet-build-deploy-e4ceca`, based on fork `main` at `cb85fbea768bbc9aa033b3cee6b070e21567ab85`.
+
+Baseline: upstream `edde746/plezy` at `8ef7c2cd9` (unchanged; see Baseline and branch scope).
+
+Affected file: `android/app/build.gradle.kts`. The `release` build type uses the `release` signing config when `key.properties` exists and the `debug` signing config otherwise. The `minified` test variant still forces debug signing; only its comment changed.
+
+Approved scope: Android build configuration. It applies to every Android flavor sharing this build file, including Android TV and Fire TV builds of the same APK. No Dart, runtime behavior, or other platform changes.
+
+Compatibility and rollback: CI and upstream release workflows always write `key.properties` first (`.github/workflows/build.yml`), so published release signing is unchanged. A debug-signed release APK cannot upgrade an install signed with the upload key, or vice versa, without uninstalling (which clears app data). Debug-signed release APKs are for local testing only and must not be distributed. Rollback restores the previous unsigned local release output.
+
+Validation: `git diff --check` passes. With no `key.properties`, `flutter build apk --release --target-platform android-arm64` (Flutter 3.47.1, approved SDK/JDK/cache paths) succeeded. `apksigner verify --print-certs` reports the `CN=Android Debug` signer, matching the local debug keystore's SHA-256 fingerprint. The APK installed with `adb install -r` over an earlier, manually debug-signed build of the same commit on Cory's Samsung tablet, at Cory's request, and launched. No credentials were entered and no credential behavior was tested on that device. The CI signed-build path and the `minified` instrumentation variant were not rebuilt.
