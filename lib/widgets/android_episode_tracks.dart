@@ -94,13 +94,16 @@ class _AndroidEpisodeTracksState extends State<AndroidEpisodeTracks> {
 }
 
 /// Episode cards only answer whether English dialogue subtitles exist; an
-/// unlabelled English track counts as dialogue, signs/forced-only does not.
+/// unlabelled English track counts as dialogue, signs/forced-only and
+/// commentary tracks do not.
 String androidEnglishSubtitleSummary(Iterable<MediaStream> streams) {
   var signsOnly = false;
   for (final stream in streams) {
     if (stream.kind != MediaStreamKind.subtitle) continue;
-    final title = stream.title?.trim() ?? stream.displayTitle;
+    final trimmed = stream.title?.trim();
+    final title = trimmed == null || trimmed.isEmpty ? stream.displayTitle : trimmed;
     if (androidTrackLanguage(stream.languageCode ?? stream.language, title) != 'en') continue;
+    if (androidTrackTitleTokens(title).contains('commentary')) continue;
     switch (androidSubtitleRole(title, forced: stream.forced)) {
       case AndroidSubtitleRole.dialogue || AndroidSubtitleRole.unspecified:
         return 'Yes';

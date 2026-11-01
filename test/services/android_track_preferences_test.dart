@@ -83,11 +83,15 @@ void main() {
     const spanish = MediaStream(id: '7', kind: MediaStreamKind.subtitle, languageCode: 'spa');
     const unknown = MediaStream(id: '8', kind: MediaStreamKind.subtitle, languageCode: 'und', title: 'Unknown');
     const englishAudio = MediaStream(id: '9', kind: MediaStreamKind.audio, languageCode: 'eng');
+    const commentary = MediaStream(id: '10', kind: MediaStreamKind.subtitle, languageCode: 'eng', title: 'Commentary');
+    const titleOnly = MediaStream(id: '11', kind: MediaStreamKind.subtitle, title: '', displayTitle: 'English (SRT)');
     expect(androidEnglishSubtitleSummary([signs, full]), 'Yes');
     expect(androidEnglishSubtitleSummary([plain]), 'Yes');
     expect(androidEnglishSubtitleSummary([signs, forced, spanish]), 'Signs/songs only');
     expect(androidEnglishSubtitleSummary([spanish, unknown, englishAudio]), 'None listed');
     expect(androidEnglishSubtitleSummary([]), 'None listed');
+    expect(androidEnglishSubtitleSummary([commentary]), 'None listed');
+    expect(androidEnglishSubtitleSummary([titleOnly]), 'Yes');
   });
 
   test('episode audio labels keep unknown language and stream identity', () {
