@@ -75,27 +75,27 @@ void main() {
     );
   });
 
-  test('episode labels retain roles, codec, unknown language, and stream identity', () {
-    final full = androidEpisodeTrackLabel(
-      const MediaStream(
-        id: '3',
-        index: 3,
-        kind: MediaStreamKind.subtitle,
-        languageCode: 'eng',
-        title: 'Full',
-        codec: 'ass',
-      ),
+  test('episode cards summarize English subtitles only', () {
+    const full = MediaStream(id: '3', kind: MediaStreamKind.subtitle, languageCode: 'eng', title: 'Full');
+    const plain = MediaStream(id: '4', kind: MediaStreamKind.subtitle, languageCode: 'eng');
+    const signs = MediaStream(id: '5', kind: MediaStreamKind.subtitle, languageCode: 'eng', title: 'Signs & Songs');
+    const forced = MediaStream(id: '6', kind: MediaStreamKind.subtitle, languageCode: 'eng', forced: true);
+    const spanish = MediaStream(id: '7', kind: MediaStreamKind.subtitle, languageCode: 'spa');
+    const unknown = MediaStream(id: '8', kind: MediaStreamKind.subtitle, languageCode: 'und', title: 'Unknown');
+    const englishAudio = MediaStream(id: '9', kind: MediaStreamKind.audio, languageCode: 'eng');
+    expect(androidEnglishSubtitleSummary([signs, full]), 'Yes');
+    expect(androidEnglishSubtitleSummary([plain]), 'Yes');
+    expect(androidEnglishSubtitleSummary([signs, forced, spanish]), 'Signs/songs only');
+    expect(androidEnglishSubtitleSummary([spanish, unknown, englishAudio]), 'None listed');
+    expect(androidEnglishSubtitleSummary([]), 'None listed');
+  });
+
+  test('episode audio labels keep unknown language and stream identity', () {
+    final label = androidEpisodeTrackLabel(
+      const MediaStream(id: '7', index: 7, kind: MediaStreamKind.audio, languageCode: 'und', title: 'Unknown'),
     );
-    expect(full, contains('English'));
-    expect(full, contains('Full dialogue'));
-    expect(full, contains('ASS'));
-    expect(full, contains('#3'));
-    expect(
-      androidEpisodeTrackLabel(
-        const MediaStream(id: '7', kind: MediaStreamKind.subtitle, languageCode: 'und', title: 'Unknown'),
-      ),
-      contains('Unknown language'),
-    );
+    expect(label, contains('Unknown language'));
+    expect(label, contains('#7'));
   });
 
   test('Android unknown player tracks get distinct numbered labels', () {
