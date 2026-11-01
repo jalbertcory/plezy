@@ -73,13 +73,10 @@ class _AndroidEpisodeTracksState extends State<AndroidEpisodeTracks> {
   @override
   Widget build(BuildContext context) {
     final streams = _streams(_fetched ?? widget.episode);
-    final audio = <String>{};
-    final subtitles = <String>{};
-    for (final stream in streams) {
-      final label = androidEpisodeTrackLabel(stream);
-      if (stream.kind == MediaStreamKind.audio) audio.add(label);
-      if (stream.kind == MediaStreamKind.subtitle) subtitles.add(label);
-    }
+    final audio = {
+      for (final stream in streams)
+        if (stream.kind == MediaStreamKind.audio) androidEpisodeTrackLabel(stream),
+    };
     final style = Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 12);
     if (streams.isEmpty) {
       return Text(_loading ? 'Loading audio and subtitles…' : 'Audio/subtitle info unavailable', style: style);
@@ -88,7 +85,7 @@ class _AndroidEpisodeTracksState extends State<AndroidEpisodeTracks> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Audio: ${audio.isEmpty ? 'None listed' : audio.join(', ')}', style: style),
-        Text('Subtitles: ${subtitles.isEmpty ? 'None listed' : subtitles.join(', ')}', style: style),
+        Text('English subtitles: ${androidEnglishSubtitleSummary(streams)}', style: style),
         if ((_fetched ?? widget.episode).mediaVersions?.length case final int count when count > 1)
           Text('Tracks across $count versions; availability depends on the version.', style: style),
       ],
@@ -96,26 +93,30 @@ class _AndroidEpisodeTracksState extends State<AndroidEpisodeTracks> {
   }
 }
 
+/// Episode cards only answer whether English dialogue subtitles exist; an
+/// unlabelled English track counts as dialogue, signs/forced-only does not.
+String androidEnglishSubtitleSummary(Iterable<MediaStream> streams) {
+  var signsOnly = false;
+  for (final stream in streams) {
+    if (stream.kind != MediaStreamKind.subtitle) continue;
+    final title = stream.title?.trim() ?? stream.displayTitle;
+    if (androidTrackLanguage(stream.languageCode ?? stream.language, title) != 'en') continue;
+    switch (androidSubtitleRole(title, forced: stream.forced)) {
+      case AndroidSubtitleRole.dialogue || AndroidSubtitleRole.unspecified:
+        return 'Yes';
+      case AndroidSubtitleRole.signs || AndroidSubtitleRole.forced:
+        signsOnly = true;
+    }
+  }
+  return signsOnly ? 'Signs/songs only' : 'None listed';
+}
+
 String androidEpisodeTrackLabel(MediaStream stream) {
   final title = stream.title?.trim();
   final language = androidTrackLanguage(stream.languageCode ?? stream.language, title ?? stream.displayTitle);
   final name = language == null ? 'Unknown language' : LanguageCodes.getDisplayName(language);
   final details = <String>[];
-  if (stream.kind == MediaStreamKind.subtitle) {
-    switch (androidSubtitleRole(title ?? stream.displayTitle, forced: stream.forced)) {
-      case AndroidSubtitleRole.dialogue:
-        details.add('Full dialogue');
-      case AndroidSubtitleRole.signs:
-        details.add('Signs/Songs');
-      case AndroidSubtitleRole.forced:
-        details.add('Forced');
-      case AndroidSubtitleRole.unspecified:
-        break;
-    }
-    if (title != null && title.isNotEmpty && title.toLowerCase() != name.toLowerCase()) details.add(title);
-    if (stream.codec?.isNotEmpty == true) details.add(stream.codec!.toUpperCase());
-    details.add('#${stream.index ?? stream.id}');
-  } else if (language == null || (title?.toLowerCase().contains('commentary') ?? false)) {
+  if (language == null || (title?.toLowerCase().contains('commentary') ?? false)) {
     if (title?.isNotEmpty == true) details.add(title!);
     details.add('#${stream.index ?? stream.id}');
   }
