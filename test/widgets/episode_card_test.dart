@@ -113,7 +113,7 @@ void main() {
     expect(find.descendant(of: metadataWrap, matching: find.text('EAC3 5.1')), findsOneWidget);
   });
 
-  testWidgets('Android episode cards show audio languages and distinguish dialogue from signs', (tester) async {
+  testWidgets('Android episode cards show audio languages and an English subtitle summary', (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     try {
       final episode = testMediaItem(
@@ -153,12 +153,11 @@ void main() {
       );
       await _pumpEpisodeCard(tester, episode);
       expect(find.text('Audio: Japanese, English'), findsOneWidget);
-      expect(find.textContaining('Signs/Songs'), findsOneWidget);
-      expect(find.textContaining('Full dialogue'), findsOneWidget);
-      expect(find.textContaining('Unknown language'), findsOneWidget);
+      expect(find.text('English subtitles: Yes'), findsOneWidget);
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
       await _pumpEpisodeCard(tester, episode);
-      expect(find.textContaining('Subtitles:'), findsNothing);
+      expect(find.textContaining('English subtitles:'), findsNothing);
+      expect(find.textContaining('Audio:'), findsNothing);
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }
