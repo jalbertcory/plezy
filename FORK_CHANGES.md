@@ -253,7 +253,7 @@ Validation: `git diff --check` passes. With no `key.properties`, `flutter build 
 
 ## Episode cards: English subtitle summary — 2026-11-01
 
-Intent: Cory only needs to know whether an episode has English subtitles, so the full per-track subtitle list on Android episode cards was too much. The card's subtitle line now reads `English subtitles: Yes`, `Signs/songs only`, or `None listed`. Status: local draft on `claude/english-subtitles-filter-25b9d1`, uncommitted, based on fork `main` at `41dde031f0d3e48902358efbdbe258c15dc50bdf`.
+Intent: Cory only needs to know whether an episode has English subtitles, so the full per-track subtitle list on Android episode cards was too much. The card's subtitle line now reads `English subtitles: Yes`, `Signs/songs only`, or `None listed`. Status: committed locally on `claude/english-subtitles-filter-25b9d1` as `e0226e85b04dd000b1614f010e9a0433140784c4`, based on fork `main` at `41dde031f0d3e48902358efbdbe258c15dc50bdf`.
 
 Baseline: upstream `edde746/plezy` at `8ef7c2cd9` (unchanged; see Baseline and branch scope).
 
