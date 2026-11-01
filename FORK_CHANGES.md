@@ -253,7 +253,7 @@ Validation: `git diff --check` passes. With no `key.properties`, `flutter build 
 
 ## Episode cards: English subtitle summary — 2026-11-01
 
-Intent: Cory only needs to know whether an episode has English subtitles, so the full per-track subtitle list on Android episode cards was too much. The card's subtitle line now reads `English subtitles: Yes`, `Signs/songs only`, or `None listed`. Status: committed on `claude/english-subtitles-filter-25b9d1` as `e0226e85b04dd000b1614f010e9a0433140784c4`, with cross-review fixes in a follow-up commit, and opened as [PR #4](https://github.com/jalbertcory/plezy/pull/4) at Cory's request on 2026-11-01. Based on fork `main` at `41dde031f0d3e48902358efbdbe258c15dc50bdf`.
+Intent: Cory only needs to know whether an episode has English subtitles, so the full per-track subtitle list on Android episode cards was too much. The card's subtitle line now reads `English subtitles: Yes`, `Signs/songs only`, or `None listed`. Status: committed on `claude/english-subtitles-filter-25b9d1` as `e0226e85b04dd000b1614f010e9a0433140784c4`, opened as [PR #4](https://github.com/jalbertcory/plezy/pull/4) at Cory's request on 2026-11-01 and merged into fork `main` as `d6a43f47b952444e53ee563ca9baee00abd05a88`. That merge landed before the cross-review fix commit `f826cedb0109efc7e2b3bfe808a9911e3879c939` was pushed, so the fixes follow in [PR #5](https://github.com/jalbertcory/plezy/pull/5). Not released. Based on fork `main` at `41dde031f0d3e48902358efbdbe258c15dc50bdf`.
 
 Baseline: upstream `edde746/plezy` at `8ef7c2cd9` (unchanged; see Baseline and branch scope).
 
