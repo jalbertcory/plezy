@@ -324,8 +324,16 @@ extension _PlexVideoControlsPlaybackInputMethods on _PlexVideoControlsState {
     );
   }
 
+  /// Move, up and cancel are delivered to the hit-test path captured at
+  /// pointer down, so they keep arriving after these controls unmount under a
+  /// held finger: the player screen swaps them out for its failure view or a
+  /// player re-init, or closes, mid-gesture. The context is gone
+  /// by then and the gesture trackers died with this State, so there is
+  /// nothing left to drive. A new pointer down is hit-tested against the live
+  /// tree and never reaches a disposed State, so the down handler needs no
+  /// such guard.
   void _handleTouchPointerMove(PointerMoveEvent event) {
-    if (event.kind != PointerDeviceKind.touch) return;
+    if (!mounted || event.kind != PointerDeviceKind.touch) return;
     _twoFingerTapTracker.pointerMove(event.pointer, event.position);
     if (_twoFingerTapTracker.isChordActive) {
       _suppressTouchTaps();
@@ -345,7 +353,8 @@ extension _PlexVideoControlsPlaybackInputMethods on _PlexVideoControlsState {
   }
 
   void _handleTouchPointerUp(PointerUpEvent event) {
-    if (event.kind != PointerDeviceKind.touch) return;
+    // Can arrive after unmount; see [_handleTouchPointerMove].
+    if (!mounted || event.kind != PointerDeviceKind.touch) return;
     final minimizeStart = _minimizeSwipeStart;
     final minimizeDelta = minimizeStart == null ? Offset.zero : event.position - minimizeStart;
     final minimize =
@@ -383,7 +392,8 @@ extension _PlexVideoControlsPlaybackInputMethods on _PlexVideoControlsState {
   }
 
   void _handleTouchPointerCancel(PointerCancelEvent event) {
-    if (event.kind != PointerDeviceKind.touch) return;
+    // Can arrive after unmount; see [_handleTouchPointerMove].
+    if (!mounted || event.kind != PointerDeviceKind.touch) return;
     if (event.pointer == _minimizeSwipePointer) {
       _minimizeSwipePointer = null;
       _minimizeSwipeStart = null;

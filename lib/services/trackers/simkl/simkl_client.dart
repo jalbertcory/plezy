@@ -9,6 +9,7 @@ import '../../../models/simkl/simkl_detail.dart';
 import '../../../models/simkl/simkl_search_result.dart';
 import '../../../models/simkl/simkl_trending_item.dart';
 import '../../../utils/app_logger.dart';
+import '../../../utils/app_version.dart';
 import '../../../utils/serial_future_queue.dart';
 import '../future_coalescer.dart';
 import '../tracker.dart';
@@ -57,6 +58,9 @@ class SimklClient implements DisposableTrackerClient {
   /// `400 RATE_LIMIT`: the previous write for this user still holds Simkl's
   /// 20-second per-user write lock. It clears as soon as that write finishes.
   static const Duration _writeLockHold = Duration(seconds: 5);
+
+  /// The statuses `/redirect` answers with; their `Location` names the page it resolved to.
+  static const Set<int> _redirectStatuses = {301, 302, 303, 307, 308};
 
   TrackerSession _session;
   final TrackerHttpClient _http;
@@ -191,6 +195,25 @@ class SimklClient implements DisposableTrackerClient {
     return decoded is Map<String, dynamic> ? SimklDetail.fromJson(decoded) : null;
   }
 
+  /// The Simkl page `/redirect` points [ids] at (`GET /redirect?to=simkl&imdb=…`), read from the unfollowed
+  /// redirect's `Location` (`https://simkl.com/movies/53536/slug`); null when Simkl answers without one.
+  Future<String?> getRedirectLocation(Map<String, String> ids) async {
+    final http.Response response;
+    try {
+      response = await _sendToApi(
+        'GET',
+        '/redirect',
+        query: {'to': 'simkl', ...ids},
+        allowStatuses: _redirectStatuses,
+        followRedirects: false,
+      );
+    } on TrackerApiException catch (e) {
+      if (e.statusCode == 404) return null;
+      rethrow;
+    }
+    return _redirectStatuses.contains(response.statusCode) ? response.headers['location'] : null;
+  }
+
   /// Best-effort server-side revoke of an AUTH V2 grant. Revoking the refresh
   /// token ends both halves. AUTH V1 has no revoke endpoint, so a legacy
   /// session is left alone. Failure is non-fatal: the local session is
@@ -202,7 +225,7 @@ class SimklClient implements DisposableTrackerClient {
       await _http.sendForm(
         'POST',
         Uri.parse(SimklConstants.revokeUrl),
-        headers: SimklConstants.oauthHeaders(appVersion: await SimklConstants.appVersion()),
+        headers: SimklConstants.oauthHeaders(appVersion: (await AppVersion.current()).versionOrUnknown),
         body: {'client_id': SimklConstants.v2ClientId, 'token': session.refreshToken ?? session.accessToken},
         timeout: TrackerConstants.revokeTimeout,
         operation: 'Simkl token revoke',
@@ -274,7 +297,7 @@ class SimklClient implements DisposableTrackerClient {
   /// The public CDN. Called without a token, so its 401s say nothing about
   /// the session, and its refusals say nothing about the API's.
   Future<http.Response> _sendToDataHost(String method, String url, {Map<String, String>? query}) async {
-    final appVersion = await SimklConstants.appVersion();
+    final appVersion = (await AppVersion.current()).versionOrUnknown;
     final clientId = SimklConstants.clientIdFor(_session.accessToken);
     final uri = Uri.parse(url).replace(
       queryParameters: SimklConstants.queryParameters(clientId: clientId, appVersion: appVersion, query: query),
@@ -297,6 +320,7 @@ class SimklClient implements DisposableTrackerClient {
     Map<String, dynamic>? body,
     Map<String, String>? query,
     required Set<int> allowStatuses,
+    bool followRedirects = true,
   }) async {
     _throwIfHeld();
 
@@ -308,7 +332,7 @@ class SimklClient implements DisposableTrackerClient {
       }
     }
 
-    var sent = await _send(method, path, body: body, query: query);
+    var sent = await _send(method, path, body: body, query: query, followRedirects: followRedirects);
 
     if (sent.response.statusCode == 401) {
       if (!SimklConstants.isV2AccessToken(sent.accessToken)) {
@@ -320,7 +344,7 @@ class SimklClient implements DisposableTrackerClient {
       // refresh kills the grant's previous access token. A failed refresh
       // propagates its TrackerAuthException, matching MDBList and Trakt.
       if (sent.accessToken == _session.accessToken) await _refresh();
-      sent = await _send(method, path, body: body, query: query);
+      sent = await _send(method, path, body: body, query: query, followRedirects: followRedirects);
       if (sent.response.statusCode == 401) _invalidate();
     }
 
@@ -338,8 +362,9 @@ class SimklClient implements DisposableTrackerClient {
     String path, {
     Map<String, dynamic>? body,
     Map<String, String>? query,
+    bool followRedirects = true,
   }) async {
-    final appVersion = await SimklConstants.appVersion();
+    final appVersion = (await AppVersion.current()).versionOrUnknown;
     final accessToken = _session.accessToken;
     final clientId = SimklConstants.clientIdFor(accessToken);
     final uri = Uri.parse('${SimklConstants.apiBase}$path').replace(
@@ -351,6 +376,7 @@ class SimklClient implements DisposableTrackerClient {
       headers: SimklConstants.headers(clientId: clientId, appVersion: appVersion, accessToken: accessToken),
       body: body,
       allowedMethods: const {'GET', 'POST'},
+      followRedirects: followRedirects,
     );
     return (response: response, accessToken: accessToken);
   }

@@ -31,7 +31,7 @@ Phases (in order):
     msstore     submit the Store msixbundle via the Microsoft Store
                 Submission API (replaces the manual Partner Center upload)
     publish     flip the GitHub release out of draft; the release event updates
-                Homebrew, WinGet, and the appcast branch
+                WinGet and the appcast branch
 
 State is checkpointed to build/deploy/state.json; a failed run resumes where
 it stopped (`release` again, optionally with --only/--skip). `--dry-run`
@@ -142,11 +142,15 @@ RELEASE_ASSET_NAMES = frozenset(
         "plezy-android-armeabi-v7a.tar.gz",
         "plezy-android-x86_64.tar.gz",
         "plezy-ios.ipa",
+        "plezy-linux-arm64.AppImage",
+        "plezy-linux-arm64.AppImage.zsync",
         "plezy-linux-arm64.deb",
         "plezy-linux-arm64.flatpak",
         "plezy-linux-arm64.pkg.tar.zst",
         "plezy-linux-arm64.rpm",
         "plezy-linux-arm64.tar.gz",
+        "plezy-linux-x64.AppImage",
+        "plezy-linux-x64.AppImage.zsync",
         "plezy-linux-x64.deb",
         "plezy-linux-x64.flatpak",
         "plezy-linux-x64.pkg.tar.zst",
@@ -914,6 +918,7 @@ def phase_play(ctx: Context) -> None:
             f"--dart-define=GIT_COMMIT={commit}",
             "--dart-define=SENTRY_ENVIRONMENT=play-store",
             "--dart-define=SENTRY_DIST=play-store",
+            "--dart-define=SUPPORTER_MODE=iap",
             "--obfuscate",
             "--split-debug-info=debug-info/android-aab",
             "--extra-gen-snapshot-options=--save-obfuscation-map=debug-info/android-aab/obfuscation.map.json",
@@ -1085,6 +1090,7 @@ def phase_amazon(ctx: Context) -> None:
             f"--dart-define=GIT_COMMIT={commit}",
             "--dart-define=SENTRY_ENVIRONMENT=amazon",
             "--dart-define=SENTRY_DIST=amazon",
+            "--dart-define=SUPPORTER_MODE=unlocked",
             "--obfuscate",
             "--split-debug-info=debug-info/android-apk",
             "--extra-gen-snapshot-options=--save-obfuscation-map=debug-info/android-apk/obfuscation.map.json",
@@ -1235,6 +1241,7 @@ def phase_ios(ctx: Context) -> None:
         f"--dart-define=GIT_COMMIT={commit}",
         "--dart-define=SENTRY_ENVIRONMENT=app-store",
         "--dart-define=SENTRY_DIST=app-store",
+        "--dart-define=SUPPORTER_MODE=iap",
         "--split-debug-info=debug-info/ios",
     ])
     run(
@@ -1680,7 +1687,7 @@ def phase_publish(ctx: Context) -> None:
         return
     if not ctx.confirm(
         f"Publish GitHub release {ctx.tag}? "
-        "The release event will update Homebrew, WinGet, and the appcast branch."
+        "The release event will update WinGet and the appcast branch."
     ):
         log("publish: skipped; rerun with --only publish when ready")
         raise PhaseDeferred

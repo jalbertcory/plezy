@@ -27,11 +27,13 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
     try {
-      await tester.pumpWidget(MaterialApp(theme: monoTheme(dark: true), home: const PlaybackSettingsScreen()));
+      await tester.pumpWidget(MaterialApp(theme: monoTheme(MonoPalette.dark), home: const PlaybackSettingsScreen()));
       await tester.pumpAndSettle();
       for (final entry in [('Default audio language', 'Japanese'), ('Default subtitle language', 'English')]) {
         final title = find.text(entry.$1);
         await tester.scrollUntilVisible(title, 400, scrollable: find.byType(Scrollable).first);
+        await tester.ensureVisible(title);
+        await tester.pumpAndSettle();
         await tester.tap(title);
         await tester.pumpAndSettle();
         await tester.tap(find.text(entry.$2).last);
@@ -51,7 +53,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
 
-    await tester.pumpWidget(MaterialApp(theme: monoTheme(dark: true), home: const PlaybackSettingsScreen()));
+    await tester.pumpWidget(MaterialApp(theme: monoTheme(MonoPalette.dark), home: const PlaybackSettingsScreen()));
     await tester.pumpAndSettle();
 
     final title = find.text('Music Quality');
@@ -77,7 +79,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
 
-    await tester.pumpWidget(MaterialApp(theme: monoTheme(dark: true), home: const PlaybackSettingsScreen()));
+    await tester.pumpWidget(MaterialApp(theme: monoTheme(MonoPalette.dark), home: const PlaybackSettingsScreen()));
     await tester.pumpAndSettle();
 
     final title = find.text('Shader Preset');
@@ -105,7 +107,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
 
-    await tester.pumpWidget(MaterialApp(theme: monoTheme(dark: true), home: const PlaybackSettingsScreen()));
+    await tester.pumpWidget(MaterialApp(theme: monoTheme(MonoPalette.dark), home: const PlaybackSettingsScreen()));
     await tester.pumpAndSettle();
 
     final title = find.text('Play Next Countdown');
@@ -125,23 +127,31 @@ void main() {
     expect(find.descendant(of: tile, matching: find.text('Play immediately')), findsOneWidget);
   });
 
-  testWidgets('toggles deinterlacing on the mpv path', (tester) async {
+  testWidgets('picks inverse telecine on the mpv path', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(1000, 1400);
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
 
-    await tester.pumpWidget(MaterialApp(theme: monoTheme(dark: true), home: const PlaybackSettingsScreen()));
+    await tester.pumpWidget(MaterialApp(theme: monoTheme(MonoPalette.dark), home: const PlaybackSettingsScreen()));
     await tester.pumpAndSettle();
 
     final title = find.text('Deinterlacing');
     await tester.scrollUntilVisible(title, 500, scrollable: find.byType(Scrollable).first);
     await tester.ensureVisible(title);
     await tester.pumpAndSettle();
+    final tile = find.widgetWithText(ListTile, 'Deinterlacing');
+    expect(find.descendant(of: tile, matching: find.textContaining('Off · ')), findsOneWidget);
+
     await tester.tap(title);
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Film'));
+    await tester.pumpAndSettle();
 
-    expect(SettingsService.instance.read(SettingsService.deinterlace), isTrue);
+    final settings = SettingsService.instance;
+    expect(settings.read(SettingsService.deinterlaceMode), DeinterlaceMode.film);
+    expect(settings.prefs.getString(SettingsService.deinterlaceMode.key), 'film');
+    expect(find.descendant(of: tile, matching: find.textContaining('Film · ')), findsOneWidget);
   });
 
   testWidgets('audio passthrough is held off and inactive while loudness normalization is on', (tester) async {
@@ -156,7 +166,7 @@ void main() {
     await settings.write(SettingsService.audioNormalization, true);
     expect(settings.read(SettingsService.audioPassthrough), isTrue);
 
-    await tester.pumpWidget(MaterialApp(theme: monoTheme(dark: true), home: const PlaybackSettingsScreen()));
+    await tester.pumpWidget(MaterialApp(theme: monoTheme(MonoPalette.dark), home: const PlaybackSettingsScreen()));
     await tester.pumpAndSettle();
 
     final title = find.text('Audio Passthrough');
@@ -185,7 +195,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
 
-    await tester.pumpWidget(MaterialApp(theme: monoTheme(dark: true), home: const PlaybackSettingsScreen()));
+    await tester.pumpWidget(MaterialApp(theme: monoTheme(MonoPalette.dark), home: const PlaybackSettingsScreen()));
     await tester.pumpAndSettle();
 
     final title = find.text('Audio Channels');
@@ -218,7 +228,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
 
-    await tester.pumpWidget(MaterialApp(theme: monoTheme(dark: true), home: const PlaybackSettingsScreen()));
+    await tester.pumpWidget(MaterialApp(theme: monoTheme(MonoPalette.dark), home: const PlaybackSettingsScreen()));
     await tester.pumpAndSettle();
 
     final title = find.text('Play Smaller Videos at Original Quality');
@@ -241,7 +251,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        theme: monoTheme(dark: true).copyWith(platform: TargetPlatform.android),
+        theme: monoTheme(MonoPalette.dark).copyWith(platform: TargetPlatform.android),
         home: const PlaybackSettingsScreen(),
       ),
     );
@@ -266,7 +276,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
 
-    await tester.pumpWidget(MaterialApp(theme: monoTheme(dark: true), home: const PlaybackSettingsScreen()));
+    await tester.pumpWidget(MaterialApp(theme: monoTheme(MonoPalette.dark), home: const PlaybackSettingsScreen()));
     await tester.pumpAndSettle();
 
     final title = find.text('Shuffle Starts at Beginning');
@@ -288,7 +298,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        theme: monoTheme(dark: true).copyWith(platform: TargetPlatform.macOS),
+        theme: monoTheme(MonoPalette.dark).copyWith(platform: TargetPlatform.macOS),
         home: const PlaybackSettingsScreen(),
       ),
     );

@@ -42,7 +42,6 @@ void main() {
     final session = host.createSession(
       navigator.currentState!,
       (_) => _TestPlayer(onStart: () => starts++, onDispose: () => disposals++),
-      null,
     );
     var finished = false;
     final result = session.createRoute().push(navigator.currentState!);
@@ -139,7 +138,6 @@ void main() {
     final session = host.createSession(
       navigator.currentState!,
       (_) => _TestPlayer(onStart: () {}, onDispose: () => disposed++),
-      null,
     );
     final result = session.createRoute().push(navigator.currentState!);
     await tester.pumpAndSettle();
@@ -177,7 +175,7 @@ void main() {
     );
     final session = AndroidVideoPlayerHost.maybeOf(
       browseContext,
-    )!.createSession(navigator.currentState!, (_) => _TestPlayer(onStart: () {}, onDispose: () {}), null);
+    )!.createSession(navigator.currentState!, (_) => _TestPlayer(onStart: () {}, onDispose: () {}));
     unawaited(session.createRoute().push(navigator.currentState!));
     await tester.pumpAndSettle();
     session.minimize();

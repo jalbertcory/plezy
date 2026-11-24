@@ -220,8 +220,7 @@ extension _VideoPlayerBuildMethods on VideoPlayerScreenState {
             return;
           }
 
-          final zoomScale = _videoFilterManager?.zoomScale ?? 1.0;
-          _visualEffects.showZoomToast(zoomScale);
+          _visualEffects.commitPinchZoom();
           _clearMobileZoomGesture();
           _setPlayerState(() {});
         },
@@ -240,14 +239,22 @@ extension _VideoPlayerBuildMethods on VideoPlayerScreenState {
                     _scheduleVideoLayoutUpdate(newSize);
 
                     var authority = (canControlPlayback: true, canNavigateMediaItems: true);
+                    // A room at its media's end has no item left to end.
+                    var canEndItem = true;
                     try {
                       authority = context
-                          .select<WatchTogetherProvider, ({bool canControlPlayback, bool canNavigateMediaItems})>(
-                            (wt) => (
-                              canControlPlayback: !wt.isInSession || wt.canControl(),
-                              canNavigateMediaItems: !wt.isInSession || wt.isHost,
-                            ),
-                          );
+                          .select<WatchTogetherProvider, ({bool canControlPlayback, bool canNavigateMediaItems})>((wt) {
+                            final adapter = _wtAdapter;
+                            final following = adapter != null && wt.follows(adapter);
+                            return (
+                              canControlPlayback: !following || wt.canControl,
+                              canNavigateMediaItems: !following || wt.isHost,
+                            );
+                          });
+                      canEndItem = context.select<WatchTogetherProvider, bool>((wt) {
+                        final adapter = _wtAdapter;
+                        return adapter == null || !wt.follows(adapter) || !wt.isAtMediaEnd;
+                      });
                     } catch (_) {
                       // Watch Together is optional outside the main app shell.
                     }
@@ -314,8 +321,10 @@ extension _VideoPlayerBuildMethods on VideoPlayerScreenState {
                         onPlayPauseRequested: _handleControlsTransport,
                         onBack: _handleBackButton,
                         onMinimize: _androidSession == null ? null : () => unawaited(_minimizeAndroidVideo()),
-                        onReachedEnd: ({skipAutoPlayCountdown = false}) =>
-                            _onVideoCompleted(true, skipAutoPlayCountdown: skipAutoPlayCountdown),
+                        onReachedEnd: canEndItem
+                            ? ({required skipAutoPlayCountdown}) =>
+                                  unawaited(_finishItem(skipAutoPlayCountdown: skipAutoPlayCountdown))
+                            : null,
                         canControl: authority.canControlPlayback,
                         canNavigateMediaItems: authority.canNavigateMediaItems,
                         hasFirstFrame: _firstFrame.uiReady,

@@ -32,6 +32,7 @@ private final class TvosRecordingMpvPlugin: MpvPluginShared {
 
   func setPlayerVisible(_ visible: Bool, restoreOnWindowVisible: Bool) {}
   func updatePlayerFrame() {}
+  func setPlayerVideoZoom(_ scale: Double) {}
   func didSetPauseProperty(value: String) {}
 }
 
@@ -112,6 +113,27 @@ final class MpvPlayerContractTests: XCTestCase {
     XCTAssertEqual(MpvPlayerCoreBase.nominalRefreshRate(25), 25)
     XCTAssertEqual(MpvPlayerCoreBase.nominalRefreshRate(27), 27)
     XCTAssertEqual(MpvPlayerCoreBase.nominalRefreshRate(0), 0)
+  }
+
+  func testMpvContextsKeepAConstantTitle() {
+    // mpv's default title is a `media-title` expansion redone on every OSD
+    // update, for a window and an audio stream name Apple TV lacks. The video
+    // and the music core share this context setup.
+    let core = MpvAudioPlayerCore()
+    XCTAssertTrue(core.initialize())
+    defer {
+      core.dispose()
+      core.queue.sync {}
+    }
+
+    let read = expectation(description: "get options/title")
+    var title: Result<String?, Error>?
+    core.getPropertyAsync("options/title") {
+      title = $0
+      read.fulfill()
+    }
+    wait(for: [read], timeout: 2)
+    XCTAssertEqual(try title?.get(), "mpv")
   }
 
   private func invokeSetProperty(_ plugin: TvosRecordingMpvPlugin) -> [Any?] {

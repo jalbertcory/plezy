@@ -7,18 +7,16 @@ import 'package:flutter/foundation.dart';
 import '../services/playback_coordinator.dart';
 import '../utils/platform_detector.dart';
 import '../utils/video_player_navigation.dart';
-import '../watch_together/services/watch_together_controller.dart';
 import '../widgets/overlay_sheet.dart';
 
 /// Keeps a handheld Android video in the profile scope while its route is
 /// removed for browsing. The keyed screen and native player survive the move.
 class AndroidVideoSession extends ChangeNotifier {
-  AndroidVideoSession(this.host, this.navigator, this.builder, this.watchTogetherLease);
+  AndroidVideoSession(this.host, this.navigator, this.builder);
 
   final AndroidVideoPlayerHostState host;
   final NavigatorState navigator;
   final WidgetBuilder builder;
-  final WatchPlaybackLease? watchTogetherLease;
   final _screenKey = GlobalKey();
   final _finished = Completer<bool?>();
   bool isMini = false;
@@ -37,8 +35,9 @@ class AndroidVideoSession extends ChangeNotifier {
   Widget fullscreen(BuildContext context) =>
       ListenableBuilder(listenable: this, builder: (_, _) => isMini || isClosed ? const SizedBox.shrink() : _screen);
 
+  // VOD routes can take part in a room, matching the non-mini launch path.
   VideoPlayerRoute createRoute() =>
-      VideoPlayerRoute(builder: fullscreen, androidSession: this, watchTogetherLease: watchTogetherLease);
+      VideoPlayerRoute(builder: fullscreen, androidSession: this, joinsWatchTogether: true);
 
   Future<bool?> observeRoute(VideoPlayerRoute current, Future<bool?> popped) {
     route = current;
@@ -142,8 +141,8 @@ class AndroidVideoPlayerHostState extends State<AndroidVideoPlayerHost> {
     return mounted && current != null && current.isMini && !current.isClosed;
   }
 
-  AndroidVideoSession createSession(NavigatorState navigator, WidgetBuilder builder, WatchPlaybackLease? lease) {
-    final next = AndroidVideoSession(this, navigator, builder, lease);
+  AndroidVideoSession createSession(NavigatorState navigator, WidgetBuilder builder) {
+    final next = AndroidVideoSession(this, navigator, builder);
     session = next;
     return next;
   }
