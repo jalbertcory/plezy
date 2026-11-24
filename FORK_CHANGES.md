@@ -267,7 +267,7 @@ Validation (Flutter 3.47.1): `dart format` made no changes. `flutter analyze --n
 
 ## Upstream sync to `b3d4e66da` — 2026-11-24
 
-Intent: bring in upstream fixes and features while keeping every fork change. Cory asked for the sync and merge on 2026-11-24. Status: merge committed locally on `claude/fork-sync-merge-93fd22` as `9ce8f62262deb4854547c9faade04ed794b7d94c` (parents `0ac291b56`, `b3d4e66da`); not pushed, not merged into fork `main`, not released.
+Intent: bring in upstream fixes and features while keeping every fork change. Cory asked for the sync and merge on 2026-11-24. Status: merge committed locally on `claude/fork-sync-merge-93fd22` as `9ce8f62262deb4854547c9faade04ed794b7d94c` (parents `0ac291b56`, `b3d4e66da`). Pushed and opened as [PR #6](https://github.com/jalbertcory/plezy/pull/6) at Cory's request on 2026-11-24; not merged into fork `main` or released.
 
 Baselines: old `8ef7c2cd9`; new `b3d4e66da12e340c8653c777f85aef5bb777ad97` (`edde746/plezy` `main`, 2026-11-23, 234 commits). Fork side: `0ac291b56` (fork `main` after PR #5).
 
