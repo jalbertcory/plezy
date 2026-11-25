@@ -52,7 +52,6 @@ void main() {
       final session = host.createSession(
         navigator.currentState!,
         (_) => VideoPlayerScreen(key: screenKey, metadata: testMediaItem(), isOffline: true),
-        null,
       );
       final finished = session.createRoute().push(navigator.currentState!);
       await tester.pump();

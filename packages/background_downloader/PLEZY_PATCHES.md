@@ -2,7 +2,7 @@
 
 Source: https://github.com/edde746/background_downloader
 
-Exact revision: `ebdf69a7bdd03d410bfdfc700add08eed0de161d` (rebased from `09690d61b29fe81feb5495cc9a5dc4349c0caef3`). The original MIT `LICENSE` and source attribution are retained.
+Exact revision: `4f361e91f3cb79b7e48486b6397e43974b6e0452` (rebased on 2026-11-24 from `ebdf69a7bdd03d410bfdfc700add08eed0de161d`, earlier `09690d61b29fe81feb5495cc9a5dc4349c0caef3`; the four patches below re-applied unchanged). The original MIT `LICENSE` and source attribution are retained.
 
 Local changes in this worktree:
 

@@ -56,6 +56,7 @@ class PlaybackSettingsScreen extends StatelessWidget {
             PlatformDetector.isAppleTV() ||
             (Platform.isWindows &&
                 (svc.read(SettingsService.matchRefreshRate) || svc.read(SettingsService.matchDynamicRange))) ||
+            (Platform.isMacOS && svc.read(SettingsService.matchRefreshRate)) ||
             (Platform.isAndroid &&
                 (svc.read(SettingsService.matchContentFrameRate) || svc.read(SettingsService.matchContentResolution)));
         // Android mpv and Apple TV only: ExoPlayer is not taking new features, and
@@ -86,7 +87,7 @@ class PlaybackSettingsScreen extends StatelessWidget {
               children: [
                 if (Platform.isAndroid) _matchContentFrameRateTile(),
                 if (Platform.isAndroid && PlatformDetector.isTV()) _matchContentResolutionTile(),
-                if (Platform.isWindows) _matchRefreshRateTile(),
+                if (Platform.isWindows || Platform.isMacOS) _matchRefreshRateTile(),
                 if (Platform.isWindows) _matchDynamicRangeTile(),
                 if (showDisplaySwitchDelay) _displaySwitchDelayTile(),
                 if (showDisableDolbyVision) _disableDolbyVisionTile(),
@@ -241,6 +242,11 @@ class PlaybackSettingsScreen extends StatelessWidget {
         pref: SettingsService.boxFitScope,
         icon: Symbols.aspect_ratio_rounded,
         title: t.settings.scopeAspectRatio,
+      ),
+      _playerScopeTile(
+        pref: SettingsService.videoZoomScope,
+        icon: Symbols.zoom_in_rounded,
+        title: t.settings.scopeZoom,
       ),
       _playerScopeTile(
         pref: SettingsService.syncOffsetScope,
@@ -524,16 +530,39 @@ class PlaybackSettingsScreen extends StatelessWidget {
     subtitle: t.settings.matchDynamicRangeDescription,
   );
 
-  Widget _deinterlaceTile() => SettingSwitchTile(
-    pref: SettingsService.deinterlace,
+  Widget _deinterlaceTile() => SettingSelectionTile<DeinterlaceMode>(
+    pref: SettingsService.deinterlaceMode,
     icon: Symbols.deblur_rounded,
     title: t.settings.deinterlace,
-    subtitle: t.settings.deinterlaceDescription,
+    subtitleBuilder: (mode) => '${_deinterlaceModeLabel(mode)} · ${t.settings.deinterlaceDescription}',
+    options: [
+      DialogOption(
+        value: DeinterlaceMode.off,
+        title: t.settings.deinterlaceOff,
+        subtitle: t.settings.deinterlaceOffDescription,
+      ),
+      DialogOption(
+        value: DeinterlaceMode.video,
+        title: t.settings.deinterlaceVideo,
+        subtitle: t.settings.deinterlaceVideoDescription,
+      ),
+      DialogOption(
+        value: DeinterlaceMode.film,
+        title: t.settings.deinterlaceFilm,
+        subtitle: t.settings.deinterlaceFilmDescription,
+      ),
+    ],
   );
 
-  // Normalization wins over passthrough in the player (loudnorm cannot filter
-  // a bitstream), so the switch reports that override instead of promising
-  // bitstreaming that will not happen.
+  String _deinterlaceModeLabel(DeinterlaceMode mode) => switch (mode) {
+    DeinterlaceMode.off => t.settings.deinterlaceOff,
+    DeinterlaceMode.video => t.settings.deinterlaceVideo,
+    DeinterlaceMode.film => t.settings.deinterlaceFilm,
+  };
+
+  // Normalization wins over passthrough in the player (neither mpv's filter nor
+  // ExoPlayer's platform effect can process a bitstream), so the switch reports
+  // that override instead of promising bitstreaming that will not happen.
   Widget _audioPassthroughTile() => SettingsBuilder(
     prefs: const [SettingsService.audioNormalization],
     builder: (context) {
@@ -544,8 +573,10 @@ class PlaybackSettingsScreen extends StatelessWidget {
         title: t.settings.audioPassthrough,
         subtitle: normalizationOn
             ? t.settings.audioPassthroughOverriddenByNormalization
-            : PlatformDetector.isAppleTV()
-            ? t.settings.audioPassthroughDescriptionAppleTv
+            : Platform.isIOS
+            ? t.settings.audioPassthroughDescriptionAppleSpatial
+            : Platform.isMacOS
+            ? t.settings.audioPassthroughDescriptionApple
             : t.settings.audioPassthroughDescription,
         enabled: !normalizationOn,
       );
